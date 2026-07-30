@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "power-emergency-tools": {
+      "command": "python",
+      "args": ["-m", "mcp_server.server"],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}

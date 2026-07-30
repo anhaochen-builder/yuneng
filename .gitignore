@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+checkpoints.db
+data/raw/*
+!data/raw/.gitkeep
+knowledge_db/
+.onnx_models/
+*.zip
+*.bz2

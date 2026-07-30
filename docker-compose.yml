@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+      - VECTOR_DB_PATH=/app/knowledge_db
+      - KNOWLEDGE_PATH=/app/data
+    volumes:
+      - ./data:/app/data
+      - ./knowledge_db:/app/knowledge_db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    ports:
+      - "${MCP_PORT:-9901}:9901"
+    environment:
+      - MCP_PORT=9901
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  chroma:
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./knowledge_db:/chroma/chroma
+    restart: unless-stopped
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
