@@ -9,47 +9,35 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+      - DEEPSEEK_REASONER_MODEL=${DEEPSEEK_REASONER_MODEL:-deepseek-reasoner}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - DIAGNOSIS_MODE=${DIAGNOSIS_MODE:-ensemble}
+      - OFFLINE_MODE=${OFFLINE_MODE:-auto}
+      - QWEN_LOCAL_PATH=${QWEN_LOCAL_PATH:-}
       - VECTOR_DB_PATH=/app/knowledge_db
       - KNOWLEDGE_PATH=/app/data
+      - API_HOST=0.0.0.0
+      - API_PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - ./data:/app/data
       - ./knowledge_db:/app/knowledge_db
+      - ./logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
+      start_period: 30s
       retries: 3
-
-  mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
-    ports:
-      - "${MCP_PORT:-9901}:9901"
-    environment:
-      - MCP_PORT=9901
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
-
-  frontend:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./frontend:/usr/share/nginx/html:ro
-    depends_on:
-      - api
-    restart: unless-stopped
-
-  chroma:
-    image: chromadb/chroma:latest
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./knowledge_db:/chroma/chroma
-    restart: unless-stopped
-    environment:
-      - IS_PERSISTENT=TRUE
-      - ANONYMIZED_TELEMETRY=FALSE
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G

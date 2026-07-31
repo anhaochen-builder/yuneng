@@ -1,0 +1,26 @@
+[
+  {
+    "device_type": "逆变器",
+    "fault_type": "IGBT过热",
+    "features": {
+      "mean_temp": 85,
+      "std_temp": 5
+    },
+    "anomaly_count": 0,
+    "risk_score": 0.7,
+    "timestamp": "2026-07-31T14:18:27.659278",
+    "cluster_id": 0
+  },
+  {
+    "device_type": "逆变器",
+    "fault_type": "IGBT过热",
+    "features": {
+      "mean_temp": 82,
+      "std_temp": 4
+    },
+    "anomaly_count": 0,
+    "risk_score": 0.65,
+    "timestamp": "2026-07-31T14:18:27.659505",
+    "cluster_id": 0
+  }
+]

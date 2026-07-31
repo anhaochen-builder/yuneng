@@ -94,6 +94,57 @@ class KnowledgeUploadResult(BaseModel):
     status: str
 
 
+class MultimodalRequest(BaseModel):
+    """多模态诊断请求"""
+    symptoms: str = Field(..., description="故障现象描述")
+    device_id: Optional[str] = Field(None, description="设备编号")
+    session_id: Optional[str] = Field(None, description="会话ID")
+    user_id: Optional[str] = Field("operator", description="用户ID")
+    images: list[str] = Field(default_factory=list, description="Base64 编码的图像列表")
+    audio_path: Optional[str] = Field(None, description="音频文件路径")
+    stream: bool = Field(False, description="是否流式输出")
+
+
+class DashboardProgress(BaseModel):
+    """项目进度"""
+    total_tasks: int = 0
+    completed: int = 0
+    in_progress: int = 0
+    pending: int = 0
+    overall_pct: float = 0.0
+
+
+class DashboardPhase(BaseModel):
+    """阶段进度"""
+    name: str
+    status: str
+    tasks: list[dict] = Field(default_factory=list)
+    completed_count: int = 0
+    total_count: int = 0
+    pct: float = 0.0
+
+
+class DashboardFileStats(BaseModel):
+    """文件统计"""
+    total_files: int = 0
+    total_lines: int = 0
+    api_endpoints: int = 0
+    agent_count: int = 0
+    skill_count: int = 0
+
+
+class DashboardResponse(BaseModel):
+    """进度监控面板响应"""
+    project: str = "驭能 - 新能源场站非计划停机智能诊断系统"
+    update_time: str
+    progress: DashboardProgress
+    phases: list[DashboardPhase]
+    file_stats: DashboardFileStats
+    current_activity: str = ""
+    data_stats: dict = Field(default_factory=dict)
+    recent_actions: list[str] = Field(default_factory=list)
+
+
 class GraphState(dict):
     """LangGraph 状态，包装为可序列化字典"""
 

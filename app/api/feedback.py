@@ -59,6 +59,8 @@ async def submit_feedback(req: FeedbackRequest):
     elif req.rating == "inaccurate":
         _handle_inaccurate(req.task_id, record)
 
+    _count_total_samples()
+
     return {
         "code": 0,
         "data": {"feedback_id": feedback_id, "status": "RECEIVED"},
@@ -66,32 +68,58 @@ async def submit_feedback(req: FeedbackRequest):
     }
 
 
-def _handle_accurate(task_id: str, record: dict):
-    """准确反馈：触发主动学习 — 案例向量化入库"""
-    logger.info(f"准确诊断 → 触发案例自动入库: task={task_id}")
+def _check_lora_threshold():
+    total = _count_total_samples()
+    if total >= 50:
+        logger.info(f"累计{total}个标注案例 ≥ 50 → 建议运行 LoRA 微调: python scripts/lora_finetune.py")
+
+
+def _count_total_samples() -> int:
+    accurate = len(FEEDBACK_STORE)
     try:
-        from app.memory.memory_service import MemoryService
-        memory = MemoryService()
-        task_ctx = memory._tasks.get(task_id, {})
-        diagnosis_text = task_ctx.get("diagnosis_text", "")
+        pending = sum(1 for _ in open(Path("data/pending_review.jsonl"), "r") if _.strip())
+    except Exception:
+        pending = 0
+    try:
+        negative = sum(1 for _ in open(Path("data/negative_samples.jsonl"), "r") if _.strip())
+    except Exception:
+        negative = 0
+    return accurate + pending + negative
 
-        if diagnosis_text:
-            from app.rag.vector_store import add_documents
-            count = add_documents(
-                texts=[diagnosis_text],
-                metadatas=[{
-                    "task_id": task_id,
-                    "rating": "accurate",
-                    "created_at": record["created_at"],
-                }],
-                ids=[f"feedback_{task_id}"],
-                collection_name="long_term_memory",
-            )
-            if count > 0:
-                logger.info(f"案例已向量化入库: {count} chunks")
 
-    except Exception as e:
-        logger.warning(f"案例入库失败（不影响主流程）: {e}")
+def _handle_accurate(task_id: str, record: dict):
+    from app.learning.case_ingestion import CaseIngestionService
+    from app.memory.memory_service import MemoryService
+
+    memory = MemoryService()
+    task_ctx = memory._tasks.get(task_id, {})
+    diagnosis_text = task_ctx.get("diagnosis_text", "")
+
+    ingestion = CaseIngestionService()
+    result = ingestion.ingest(
+        task_id=task_id,
+        symptoms=task_ctx.get("symptoms", ""),
+        diagnosis_text=diagnosis_text,
+        root_cause=task_ctx.get("root_cause", ""),
+        confidence=task_ctx.get("confidence", 0.5),
+        risk_level=task_ctx.get("risk_level", "MEDIUM"),
+        device_id=task_ctx.get("device_id", ""),
+        device_type=task_ctx.get("device_type", ""),
+    )
+
+    if result.get("success"):
+        logger.info(f"案例入库成功: {task_id}")
+
+        fault_type = ingestion._classify_fault(task_ctx.get("symptoms", ""))
+        count = ingestion.count_by_fault_type(fault_type)
+
+        if count >= 3:
+            from app.learning.skill_generator import skill_generator
+            skill_result = skill_generator.check_and_generate(fault_type)
+            if skill_result.get("generated"):
+                logger.info(f"Skill自动生成: {skill_result.get('skill_id')}")
+
+    _check_lora_threshold()
 
 
 def _handle_partially_accurate(task_id: str, record: dict):

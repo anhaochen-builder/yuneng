@@ -10,10 +10,19 @@ BASE_DIR = Path(__file__).parent.parent
 
 
 class Settings:
-    # DeepSeek V4 Pro
     deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", "")
     deepseek_base_url: str = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     deepseek_model: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    deepseek_reasoner_model: str = os.getenv("DEEPSEEK_REASONER_MODEL", "deepseek-reasoner")
+
+    dashscope_api_key: str = os.getenv("DASHSCOPE_API_KEY", "")
+    qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    qwen_model: str = "qwen-max"
+
+    diagnosis_mode: str = os.getenv("DIAGNOSIS_MODE", "ensemble")
+
+    qwen_local_path: str = os.getenv("QWEN_LOCAL_PATH", "")
+    offline_mode: str = os.getenv("OFFLINE_MODE", "auto")
 
     # 向量数据库
     vector_db_path: str = os.getenv("VECTOR_DB_PATH", str(BASE_DIR / "knowledge_db"))

@@ -15,7 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
-from app.api import chat, diagnosis, alarm, knowledge, feedback, trace, scada
+from app.api import chat, diagnosis, alarm, knowledge, feedback, trace, scada, dashboard, audit
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -90,6 +90,16 @@ app.include_router(knowledge.router)
 app.include_router(feedback.router)
 app.include_router(trace.router)
 app.include_router(scada.router)
+app.include_router(dashboard.router)
+app.include_router(audit.router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """启动时注册所有子智能体"""
+    from app.graph.sub_agent_init import register_all
+    register_all()
+    logger.info("所有子智能体已注册: 6 个 SubAgent, 6 个 Skill")
 
 
 @app.get("/health")
@@ -117,7 +127,13 @@ async def search_tools(keyword: str = ""):
 @app.get("/api/skills")
 async def list_skills():
     from app.skill.registry import skill_registry
-    return skill_registry.list_all()
+    skills = skill_registry.list_all()
+    agents = skill_registry.list_agents()
+    return {
+        "skills": skills,
+        "sub_agents": agents,
+        "architecture": "Supervisor + 子智能体模式，6 个 SubAgent 由 Supervisor 统一调度",
+    }
 
 
 # 静态文件（前端）
