@@ -62,14 +62,15 @@ class UnifiedResponseMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         content_type = response.headers.get("content-type", "")
-        # 跳过流式/HTML/文件等非 JSON 响应
+        # 跳过非 JSON 响应: 流式/HTML/静态资源
         if isinstance(response, StreamingResponse):
             return response
-        if "text/event-stream" in content_type:
+        if any(t in content_type for t in ("text/event-stream", "text/html", "text/css",
+                "application/javascript", "image/", "font/", "application/octet-stream")):
             return response
-        if "text/html" in content_type:
+        if request.url.path.startswith("/assets/"):
             return response
-        if request.url.path in ("/openapi.json", "/docs", "/redoc"):
+        if request.url.path in ("/openapi.json", "/docs", "/redoc", "/favicon.ico"):
             return response
 
         if 200 <= response.status_code < 300:
