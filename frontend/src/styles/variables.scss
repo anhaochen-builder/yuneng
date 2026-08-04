@@ -1,0 +1,22 @@
+// 驭能 — 全局 CSS 变量定义
+:root {
+  --color-bg-primary: #020b18;
+  --color-bg-secondary: #0a1628;
+  --color-accent: #00f0ff;
+  --color-accent-dim: rgba(0, 240, 255, 0.15);
+  --color-text-primary: #e0e6ed;
+  --color-text-secondary: #8892a4;
+  --color-critical: #ff4d4f;
+  --color-high: #ff9c40;
+  --color-medium: #ffd666;
+  --color-low: #52c41a;
+  --font-digital: 'Orbitron', 'Share Tech Mono', monospace;
+  --font-body: 'Inter', 'PingFang SC', sans-serif;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --shadow-glow: 0 0 10px rgba(0, 240, 255, 0.3);
+  --border-tech: 1px solid rgba(0, 240, 255, 0.2);
+}
