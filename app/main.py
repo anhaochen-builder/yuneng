@@ -202,8 +202,8 @@ async def list_skills():
     }
 
 
-# 静态文件（前端）
-frontend_path = Path(__file__).parent.parent / "frontend"
+# 静态文件（前端构建产物）
+frontend_path = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_path.exists():
     app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
 
