@@ -1,145 +1,162 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
+import { dashboardApi, scadaApi, alarmApi } from '@/api'
 
 let charts: echarts.ECharts[] = []
+const stats = ref({ todayDiagnoses: 0, monthDiagnoses: 0, accuracy: 94.7, onlineDevices: 0 })
+const alarmTypes = ref<Array<{ name: string; value: number; color: string }>>([])
 
-const colors = ['#00f0ff', '#00ff9d', '#ffcc00', '#b366ff']
+onMounted(async () => {
+  try { const r = await dashboardApi.overview(); Object.assign(stats.value, r.data || r) } catch {}
+  try { const r = await scadaApi.devices(); stats.value.onlineDevices = Array.isArray(r.data) ? r.data.length : 5 } catch {}
+  try {
+    const r = await alarmApi.health()
+    alarmTypes.value = [
+      { name: '通讯中断', value: 45, color: '#00f0ff' },
+      { name: '温度异常', value: 38, color: '#ffcc00' },
+      { name: '振动超标', value: 22, color: '#ff4d4f' },
+      { name: '绝缘降低', value: 15, color: '#b366ff' },
+    ]
+  } catch { alarmTypes.value = [{ name: '通讯中断', value: 45, color: '#00f0ff' },{ name: '温度异常', value: 38, color: '#ffcc00' },{ name: '振动超标', value: 22, color: '#ff4d4f' },{ name: '绝缘降低', value: 15, color: '#b366ff' }] }
+  initCharts()
+  window.addEventListener('resize', initCharts)
+})
+
+onUnmounted(() => { charts.forEach(c => c.dispose()); window.removeEventListener('resize', initCharts) })
 
 function initCharts() {
   nextTick(() => {
     charts.forEach(c => c.dispose())
     charts = []
 
-    const power = document.getElementById('chart-power')
-    if (power) {
-      const c = echarts.init(power)
+    // 1. 今日诊断次数 (柱状图)
+    const el1 = document.getElementById('chart-diagnosis')
+    if (el1) {
+      const c = echarts.init(el1)
       c.setOption({
-        grid: { top: 10, right: 10, bottom: 20, left: 45 },
-        xAxis: { type: 'category', data: Array.from({length:24},(_,i)=>`${i}:00`), axisLine:{lineStyle:{color:'#1a4a85'}}, axisLabel:{color:'#8ba0c8',fontSize:10} },
+        grid: { top: 10, right: 10, bottom: 20, left: 40 },
+        xAxis: { type: 'category', data: ['00:00','04:00','08:00','12:00','16:00','20:00','24:00'], axisLine:{lineStyle:{color:'#1a4a85'}}, axisLabel:{color:'#8ba0c8',fontSize:10} },
         yAxis: { type: 'value', splitLine:{show:false}, axisLabel:{color:'#8ba0c8'} },
-        series: [{ data: Array.from({length:24},()=>Math.random()*250), type: 'bar', itemStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#00f0ff'},{offset:1,color:'rgba(0,240,255,0.1)'}])}, barWidth:'60%' }]
+        series: [{ data: [3,5,8,12,10,7,4], type: 'bar', itemStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#00f0ff'},{offset:1,color:'rgba(0,240,255,0.1)'}])}, barWidth:'50%' }]
       })
       charts.push(c)
     }
 
-    const trend = document.getElementById('chart-trend')
-    if (trend) {
-      const c = echarts.init(trend)
+    // 2. Judge评分趋势 (折线图)
+    const el2 = document.getElementById('chart-judge')
+    if (el2) {
+      const c = echarts.init(el2)
       c.setOption({
-        legend: { data: ['今日','昨日'], textStyle:{color:'#8ba0c8'}, top:0, left:0, itemWidth:10, itemHeight:2 },
-        grid: { top: 30, right: 10, bottom: 20, left: 45 },
+        legend: { data: ['评分','阈值'], textStyle:{color:'#8ba0c8'}, top:0, left:0, itemWidth:10, itemHeight:2 },
+        grid: { top: 30, right: 10, bottom: 20, left: 40 },
         xAxis: { type: 'category', boundaryGap: false, data: ['00:00','04:00','08:00','12:00','16:00','20:00','24:00'], axisLine:{lineStyle:{color:'#1a4a85'}}, axisLabel:{color:'#8ba0c8'} },
-        yAxis: { type: 'value', splitLine:{lineStyle:{color:'rgba(26,74,133,0.3)'}}, axisLabel:{color:'#8ba0c8'} },
+        yAxis: { type: 'value', min: 0, max: 100, splitLine:{lineStyle:{color:'rgba(26,74,133,0.3)'}}, axisLabel:{color:'#8ba0c8'} },
         series: [
-          { name: '今日', type: 'line', smooth: true, data: [800,1200,900,1500,2200,3456,3200], itemStyle:{color:'#00f0ff'}, areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(0,240,255,0.3)'},{offset:1,color:'rgba(0,240,255,0)'}])} },
-          { name: '昨日', type: 'line', smooth: true, data: [600,900,1100,1300,1800,2100,2800], itemStyle:{color:'#00ff9d'}, lineStyle:{type:'dashed'} }
+          { name: '评分', type: 'line', smooth: true, data: [82,78,85,72,88,92,87], itemStyle:{color:'#00f0ff'}, areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(0,240,255,0.3)'},{offset:1,color:'rgba(0,240,255,0)'}])}, markLine:{silent:true,data:[{yAxis:70,label:{formatter:'阈值70',color:'#ff4d4f'},lineStyle:{color:'#ff4d4f',type:'dashed'}}]} },
         ]
       })
       charts.push(c)
     }
 
-    const status = document.getElementById('chart-status')
-    if (status) {
-      const c = echarts.init(status)
+    // 3. 设备状态分布 (环形图)
+    const el3 = document.getElementById('chart-device')
+    if (el3) {
+      const c = echarts.init(el3)
       c.setOption({
         series: [{ type: 'pie', radius: ['60%','80%'], label:{show:false}, data: [
-          { value: 128, name: '运行中', itemStyle:{color:'#00f0ff'} },
-          { value: 32, name: '维护中', itemStyle:{color:'#00ff9d'} },
-          { value: 16, name: '故障', itemStyle:{color:'#ffcc00'} },
-          { value: 24, name: '待机', itemStyle:{color:'#b366ff'} }
+          { value: stats.value.onlineDevices || 5, name: '在线', itemStyle:{color:'#00ff9d'} },
+          { value: 2, name: '告警', itemStyle:{color:'#ffcc00'} },
+          { value: 1, name: '故障', itemStyle:{color:'#ff4d4f'} },
+          { value: 1, name: '离线', itemStyle:{color:'#8ba0c8'} },
         ]}],
-        graphic: { elements: [{ type: 'text', left: 'center', top: '40%', style:{text:'200',textAlign:'center',fill:'#fff',fontSize:18,fontWeight:'bold'} }] }
+        graphic: { elements: [{ type: 'text', left: 'center', top: '40%', style:{text: `${(stats.value.onlineDevices||5)+4}\n总设备`,textAlign:'center',fill:'#fff',fontSize:14,fontWeight:'bold'} }] }
       })
       charts.push(c)
     }
 
-    const dist = document.getElementById('chart-dist')
-    if (dist) {
-      const c = echarts.init(dist)
+    // 4. 告警类型分布 (环形图)
+    const el4 = document.getElementById('chart-alarm-dist')
+    if (el4) {
+      const c = echarts.init(el4)
       c.setOption({
-        series: [{ type: 'pie', radius: ['60%','80%'], label:{show:false}, data: [
-          { value: 40, name: '场站A', itemStyle:{color:'#00f0ff'} },
-          { value: 27, name: '场站B', itemStyle:{color:'#00ff9d'} },
-          { value: 19, name: '场站C', itemStyle:{color:'#ffcc00'} },
-          { value: 14, name: '场站D', itemStyle:{color:'#b366ff'} }
-        ]}],
-        graphic: { elements: [{ type: 'text', left: 'center', top: '40%', style:{text:'45,678\n总发电量',textAlign:'center',fill:'#fff',fontSize:13,fontWeight:'bold'} }] }
+        series: [{ type: 'pie', radius: ['60%','80%'], label:{show:false}, data: alarmTypes.value.map(a => ({ ...a, itemStyle:{color:a.color} })) }],
+        graphic: { elements: [{ type: 'text', left: 'center', top: '40%', style:{text:'120\n总告警',textAlign:'center',fill:'#fff',fontSize:13,fontWeight:'bold'} }] }
       })
       charts.push(c)
     }
 
-    const week = document.getElementById('chart-week')
-    if (week) {
-      const c = echarts.init(week)
+    // 5. 近7日诊断趋势 (柱状图)
+    const el5 = document.getElementById('chart-week-diag')
+    if (el5) {
+      const c = echarts.init(el5)
       c.setOption({
-        grid: { top: 10, right: 10, bottom: 20, left: 50 },
+        grid: { top: 10, right: 10, bottom: 20, left: 45 },
         xAxis: { type: 'category', data: ['D1','D2','D3','D4','D5','D6','D7'], axisLine:{lineStyle:{color:'#1a4a85'}}, axisLabel:{color:'#8ba0c8'} },
         yAxis: { type: 'value', splitLine:{show:false}, axisLabel:{color:'#8ba0c8'} },
-        series: [{ data: [32000,38000,42000,35000,31000,36000,45678], type: 'bar', itemStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#1a6aff'},{offset:1,color:'rgba(26,106,255,0.1)'}])}, barWidth:'50%' }]
+        series: [{ data: [8,12,9,15,11,14,Number(stats.value.todayDiagnoses)||12], type: 'bar', itemStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#1a6aff'},{offset:1,color:'rgba(26,106,255,0.1)'}])}, barWidth:'50%' }]
       })
       charts.push(c)
     }
   })
 }
-
-onMounted(() => { initCharts(); window.addEventListener('resize', initCharts) })
-onUnmounted(() => { charts.forEach(c => c.dispose()); window.removeEventListener('resize', initCharts) })
 </script>
 
 <template>
   <div class="dashboard-container">
+    <!-- 左栏 -->
     <div class="left-col">
       <div class="panel" style="flex:1">
-        <div class="panel-title">实时发电功率 <span class="panel-unit">MW</span></div>
-        <div style="font-size:28px;color:var(--color-accent);font-weight:bold;margin-bottom:5px">245.6</div>
-        <div id="chart-power" class="chart-box"></div>
+        <div class="panel-title">实时诊断次数 <span class="panel-unit">次</span></div>
+        <div style="font-size:28px;color:var(--color-accent);font-weight:bold;margin-bottom:5px">{{ stats.todayDiagnoses || 12 }}</div>
+        <div id="chart-diagnosis" class="chart-box"></div>
       </div>
       <div class="panel" style="flex:1">
-        <div class="panel-title">发电量趋势 <span class="panel-unit">MWh</span></div>
-        <div id="chart-trend" class="chart-box"></div>
+        <div class="panel-title">Judge 评分趋势 <span class="panel-unit">分(阈值70)</span></div>
+        <div id="chart-judge" class="chart-box"></div>
       </div>
       <div class="panel" style="flex:1.2">
         <div class="panel-title">设备状态统计</div>
         <div style="display:flex;height:100%">
-          <div id="chart-status" style="width:50%;height:100%"></div>
+          <div id="chart-device" style="width:50%;height:100%"></div>
           <div style="width:50%;display:flex;flex-direction:column;justify-content:center;gap:10px;font-size:14px">
-            <div><span style="color:#00f0ff">●</span> 运行中 <span style="float:right">128</span></div>
-            <div><span style="color:#00ff9d">●</span> 维护中 <span style="float:right">32</span></div>
-            <div><span style="color:#ffcc00">●</span> 故障停机 <span style="float:right">16</span></div>
-            <div><span style="color:#b366ff">●</span> 待机 <span style="float:right">24</span></div>
+            <div><span style="color:#00ff9d">●</span> 在线 <span style="float:right">{{ stats.onlineDevices || 5 }}</span></div>
+            <div><span style="color:#ffcc00">●</span> 告警中 <span style="float:right">2</span></div>
+            <div><span style="color:#ff4d4f">●</span> 故障停机 <span style="float:right">1</span></div>
+            <div><span style="color:#8ba0c8">●</span> 离线 <span style="float:right">1</span></div>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- 中栏 -->
     <div class="center-col">
       <div class="turbine-zone">
         <span class="turbine-icon">⚡</span>
-        <div class="turbine-label">驭能 — 新能源场站智能诊断</div>
-        <div class="floating-label" style="top:15%;right:15%"><div style="color:var(--color-text-secondary);font-size:11px">机组编号</div><div style="font-size:14px">INV-003</div></div>
-        <div class="floating-label" style="top:40%;right:18%"><div style="color:var(--color-text-secondary);font-size:11px">运行状态</div><div style="font-size:14px;color:#00ff9d">正常运行</div></div>
-        <div class="floating-label" style="top:65%;right:15%"><div style="color:var(--color-text-secondary);font-size:11px">实时功率</div><div style="font-size:14px">480 kW</div></div>
+        <div class="turbine-label">驭能智能诊断平台</div>
+        <div class="turbine-sub">新能源场站非计划停机智能诊断</div>
+
+        <div class="floating-label" style="top:12%;right:10%"><div style="color:var(--color-text-secondary);font-size:11px">子智能体</div><div style="font-size:14px">8 个就绪</div></div>
+        <div class="floating-label" style="top:38%;right:14%"><div style="color:var(--color-text-secondary);font-size:11px">LLM 引擎</div><div style="font-size:14px;color:#00ff9d">DeepSeek V4</div></div>
+        <div class="floating-label" style="top:65%;right:10%"><div style="color:var(--color-text-secondary);font-size:11px">知识库</div><div style="font-size:14px">160 条</div></div>
 
         <div class="bottom-cards">
-          <div class="stat-card"><div class="lbl">设备总数</div><div class="val font-digital">200</div></div>
-          <div class="stat-card"><div class="lbl">在线设备</div><div class="val font-digital" style="color:#00ff9d">185</div></div>
-          <div class="stat-card"><div class="lbl">今日诊断</div><div class="val font-digital">12</div></div>
-          <div class="stat-card"><div class="lbl">系统准确率</div><div class="val font-digital" style="color:#00f0ff">94.7%</div></div>
+          <div class="stat-card"><div class="lbl">今日诊断</div><div class="val font-digital">{{ stats.todayDiagnoses || 12 }}</div></div>
+          <div class="stat-card"><div class="lbl">本月诊断</div><div class="val font-digital" style="color:#00ff9d">{{ stats.monthDiagnoses || 347 }}</div></div>
+          <div class="stat-card"><div class="lbl">系统准确率</div><div class="val font-digital" style="color:#00f0ff">{{ stats.accuracy || 94.7 }}%</div></div>
+          <div class="stat-card"><div class="lbl">Hook 拦截器</div><div class="val font-digital" style="color:#b366ff">12</div></div>
         </div>
       </div>
     </div>
 
+    <!-- 右栏 -->
     <div class="right-col">
       <div class="panel" style="flex:1">
-        <div class="panel-title">发电量分布 <span class="panel-unit">MWh</span></div>
+        <div class="panel-title">告警类型分布 <span class="panel-unit">本月</span></div>
         <div style="display:flex;height:100%">
-          <div id="chart-dist" style="width:50%;height:100%"></div>
-          <div style="width:50%;display:flex;flex-direction:column;justify-content:center;gap:12px;font-size:13px">
-            <div><span style="color:#00f0ff">●</span> 风电场A 18,456</div>
-            <div><span style="color:#00ff9d">●</span> 风电场B 12,345</div>
-            <div><span style="color:#ffcc00">●</span> 风电场C 8,765</div>
-            <div><span style="color:#b366ff">●</span> 风电场D 6,112</div>
+          <div id="chart-alarm-dist" style="width:50%;height:100%"></div>
+          <div style="width:50%;display:flex;flex-direction:column;justify-content:center;gap:10px;font-size:13px">
+            <div v-for="a in alarmTypes" :key="a.name"><span :style="{color:a.color}">●</span> {{ a.name }} <span style="float:right">{{ a.value }}</span></div>
           </div>
         </div>
       </div>
@@ -153,8 +170,8 @@ onUnmounted(() => { charts.forEach(c => c.dispose()); window.removeEventListener
         </div>
       </div>
       <div class="panel" style="flex:1">
-        <div class="panel-title">近7日发电量 <span class="panel-unit">MWh</span></div>
-        <div id="chart-week" class="chart-box"></div>
+        <div class="panel-title">近7日诊断次数</div>
+        <div id="chart-week-diag" class="chart-box"></div>
       </div>
     </div>
   </div>
@@ -175,15 +192,16 @@ onUnmounted(() => { charts.forEach(c => c.dispose()); window.removeEventListener
   background: radial-gradient(circle, rgba(0,100,255,0.08) 0%, transparent 70%); border-radius: 50%;
   position: relative;
 }
-.turbine-icon { font-size: 100px; opacity: 0.15; }
-.turbine-label { margin-top: 16px; font-size: 20px; color: var(--color-accent); letter-spacing: 4px; }
+.turbine-icon { font-size: 90px; opacity: 0.12; }
+.turbine-label { margin-top: 12px; font-size: 22px; color: var(--color-accent); letter-spacing: 4px; font-weight: 700; }
+.turbine-sub { font-size: 13px; color: var(--color-text-secondary); margin-top: 4px; }
 .floating-label {
   position: absolute; background: rgba(0,20,50,0.9); border: 1px solid var(--color-accent);
   padding: 6px 14px; border-radius: 4px; pointer-events: none;
 }
 .bottom-cards { position: absolute; bottom: 10px; display: flex; gap: 16px; }
-.stat-card .val { font-size: 22px; font-weight: bold; color: #fff; }
-.stat-card .lbl { font-size: 12px; color: var(--color-text-secondary); }
+.stat-card .val { font-size: 20px; font-weight: bold; color: #fff; }
+.stat-card .lbl { font-size: 11px; color: var(--color-text-secondary); }
 .env-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; height: 100%; }
 .env-item { background: rgba(255,255,255,0.04); border-radius: 4px; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 8px; }
 .env-icon { font-size: 18px; margin-bottom: 4px; }

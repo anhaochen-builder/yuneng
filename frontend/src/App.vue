@@ -39,7 +39,7 @@ function isActive(path: string) {
           {{ systemReady ? 'DeepSeek V4 Pro' : '连接中...' }}
         </span>
       </div>
-      <h1 class="header-title">智慧能源管理平台</h1>
+      <h1 class="header-title">驭能智能诊断平台</h1>
       <div class="header-right">
         <span class="header-time font-digital">{{ now.toLocaleTimeString('zh-CN', { hour12: false }) }}</span>
       </div>
