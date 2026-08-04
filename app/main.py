@@ -117,6 +117,11 @@ app.add_middleware(UnifiedResponseMiddleware)
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404 and "text/html" in request.headers.get("accept", ""):
+        index_path = Path(__file__).parent.parent / "frontend" / "dist" / "index.html"
+        if index_path.exists():
+            from fastapi.responses import FileResponse
+            return FileResponse(index_path, media_type="text/html")
     return JSONResponse(
         status_code=exc.status_code,
         content={
