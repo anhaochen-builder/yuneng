@@ -67,7 +67,7 @@ function isActive(path: string) {
 </template>
 
 <style scoped lang="scss">
-.app-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.app-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; position: relative; z-index: 1; }
 .dashboard-header {
   display: flex; justify-content: space-between; align-items: center;
   height: 70px; padding: 0 30px; flex-shrink: 0;
