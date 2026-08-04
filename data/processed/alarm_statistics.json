@@ -1,0 +1,101 @@
+{
+  "turbine_id": 80,
+  "period": "2012-2017",
+  "total_alarms": 10202,
+  "unavailable_periods": 3967,
+  "alarm_types": 157,
+  "top_20": [
+    [
+      "System OK",
+      1142
+    ],
+    [
+      "",
+      810
+    ],
+    [
+      "WindSpeed<StartCond",
+      692
+    ],
+    [
+      "Service mode",
+      532
+    ],
+    [
+      "Manual stop",
+      413
+    ],
+    [
+      "Service active hub",
+      383
+    ],
+    [
+      "Safety sys activated",
+      355
+    ],
+    [
+      "Repeating alarm",
+      335
+    ],
+    [
+      "M.bear. PressOilPp<SL",
+      279
+    ],
+    [
+      "Freq. conv. error",
+      216
+    ],
+    [
+      "PLU Pitch Angle>SH",
+      214
+    ],
+    [
+      "(H)(B)press Test",
+      209
+    ],
+    [
+      "M.bear. Error Pressure",
+      206
+    ],
+    [
+      "Freq. conv. error A",
+      185
+    ],
+    [
+      "PLU com. error",
+      144
+    ],
+    [
+      "WindSpeedSens2 defect",
+      125
+    ],
+    [
+      "Transient grid error",
+      114
+    ],
+    [
+      "Manual yaw active",
+      114
+    ],
+    [
+      "MGB FuseTrip OilPump",
+      109
+    ],
+    [
+      "PLU BladeAngleDelta>SHH",
+      105
+    ]
+  ],
+  "by_category": {
+    "故障恢复": 1142,
+    "其他": 3015,
+    "变桨/叶片": 654,
+    "安全系统": 463,
+    "通讯/控制": 585,
+    "风速相关": 1020,
+    "运维操作": 1547,
+    "变流器/电网": 806,
+    "轴承/润滑": 828,
+    "温度相关": 142
+  }
+}
