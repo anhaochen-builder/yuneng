@@ -2,90 +2,129 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-body {
+html, body {
   background: transparent;
   color: var(--color-text-primary);
   font-family: var(--font-body);
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+// ── Element Plus 主题覆盖 ──
+.el-button--primary {
+  --el-button-bg-color: rgba(48, 167, 209, 0.22);
+  --el-button-border-color: rgba(48, 167, 209, 0.45);
+  --el-button-hover-bg-color: rgba(48, 167, 209, 0.35);
+  --el-button-hover-border-color: rgba(48, 167, 209, 0.65);
+  --el-button-text-color: #fff;
+}
+
+.el-table {
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  --el-table-header-bg-color: rgba(48, 167, 209, 0.08);
+  --el-table-border-color: rgba(48, 167, 209, 0.10);
+  --el-table-text-color: var(--color-text-primary);
+  --el-table-header-text-color: var(--color-accent);
+  --el-table-row-hover-bg-color: rgba(48, 167, 209, 0.08);
+}
+
+.el-table th.el-table__cell {
+  background-color: rgba(48, 167, 209, 0.08);
+  font-size: 12px; font-weight: 600;
+}
+
+.el-input__wrapper {
+  background-color: rgba(4, 32, 79, 0.55) !important;
+  border-color: rgba(48, 167, 209, 0.18) !important;
+  box-shadow: none !important;
+}
+.el-input__inner { color: var(--color-text-primary) !important; }
+.el-select .el-input__wrapper { background-color: rgba(4, 32, 79, 0.55) !important; }
+.el-progress-bar__outer { background-color: rgba(255, 255, 255, 0.06); }
+.el-dialog { background: rgba(4, 32, 79, 0.95); border: 1px solid rgba(48, 167, 209, 0.18); }
+.el-loading-mask { background-color: rgba(1, 20, 56, 0.6); }
+
+// ── 面板组件 ──
 .panel {
   background: var(--color-panel-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border: 1px solid rgba(10, 84, 150, 0.25);
+  border-radius: 6px;
   padding: 15px;
   position: relative;
-  backdrop-filter: blur(5px);
-  display: flex;
-  flex-direction: column;
+  backdrop-filter: blur(10px);
+  display: flex; flex-direction: column;
+  box-shadow: var(--shadow-card);
+
+  &::before, &::after {
+    content: ''; position: absolute;
+    width: 12px; height: 12px;
+    border: 2px solid var(--color-accent);
+    opacity: 0.5; transition: opacity 0.3s;
+  }
+  &::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+  &::after  { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+  &:hover::before, &:hover::after { opacity: 0.8; }
 }
-.panel::before, .panel::after {
-  content: '';
-  position: absolute;
-  width: 10px; height: 10px;
-  border: 2px solid var(--color-accent);
-}
-.panel::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
-.panel::after  { bottom: -1px; right: -1px; border-left: none; border-top: none; }
 
 .panel-title {
-  font-size: 16px; font-weight: bold; color: var(--color-accent);
+  font-size: 15px; font-weight: bold; color: var(--color-accent);
   margin-bottom: 10px; display: flex; align-items: center;
+
+  &::before {
+    content: ''; display: inline-block; width: 4px; height: 16px;
+    background: var(--color-accent); margin-right: 8px; border-radius: 2px;
+    box-shadow: 0 0 6px var(--color-accent);
+  }
 }
-.panel-title::before {
-  content: ''; display: inline-block; width: 4px; height: 16px;
-  background: var(--color-accent); margin-right: 8px;
-}
-.panel-unit { font-size: 12px; color: var(--color-text-secondary); margin-left: auto; }
+.panel-unit { font-size: 12px; color: var(--color-text-secondary); margin-left: auto; font-weight: 400; }
 
 .font-digital { font-family: var(--font-digital); }
 
 .tech-card {
   background: var(--color-panel-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+  border: 1px solid rgba(10, 84, 150, 0.22);
+  border-radius: 6px;
   padding: var(--spacing-lg);
   position: relative;
-  backdrop-filter: blur(5px);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-card);
+
   &::before, &::after {
-    content: '';
-    position: absolute;
+    content: ''; position: absolute;
     width: 10px; height: 10px;
     border: 2px solid var(--color-accent);
+    opacity: 0.45; transition: opacity 0.3s;
   }
   &::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
   &::after  { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+  &:hover::before, &:hover::after { opacity: 0.75; }
 }
 
-.stat-card {
-  background: rgba(6, 30, 65, 0.8);
-  border: 1px solid var(--color-border);
-  padding: 15px 20px;
-  border-radius: 8px;
-  text-align: center;
-  box-shadow: 0 0 15px rgba(0, 100, 255, 0.2);
-}
+.chart-box { flex: 1; width: 100%; min-height: 0; overflow: hidden; }
 
-@keyframes breathe {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 4px var(--color-critical); }
-  50% { box-shadow: 0 0 20px var(--color-critical), 0 0 40px rgba(255, 77, 79, 0.3); }
-}
+// ── 滚动条 ──
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(48, 167, 209, 0.22); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(48, 167, 209, 0.40); }
+
+// ── 全局动画 ──
+@keyframes breathe { 0%,100%{opacity:0.4} 50%{opacity:1} }
+@keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeInUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes pulseGlow { 0%,100%{box-shadow:0 0 4px var(--color-critical)} 50%{box-shadow:0 0 20px var(--color-critical),0 0 40px rgba(232,85,85,0.3)} }
 
 .animate-breathe { animation: breathe 3s ease-in-out infinite; }
-.animate-fade-in { animation: fadeIn 0.6s ease-out; }
+.animate-fade-in { animation: fadeIn 0.5s ease-out; }
+.animate-fade-in-up { animation: fadeInUp 0.5s ease-out; }
 .pulse-glow { animation: pulseGlow 1.5s ease-in-out infinite; }
-.data-glow { text-shadow: 0 0 8px rgba(0, 240, 255, 0.4), 0 0 20px rgba(0, 240, 255, 0.1); }
 
-.chart-box { flex: 1; width: 100%; min-height: 0; }
+.data-glow {
+  text-shadow: 0 0 8px rgba(48, 167, 209, 0.45), 0 0 20px rgba(48, 167, 209, 0.18);
+}
 
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, 0.25); border-radius: 2px; }
+::selection {
+  background: rgba(48, 167, 209, 0.28); color: #fff;
+}

@@ -1,25 +1,44 @@
-// 驭能 — 全局 CSS 变量定义
+// 驭能 — 全局 CSS 变量定义 (匹配效果图配色)
 :root {
-  --color-bg-primary: #020b1a;
-  --color-bg-secondary: #061e41;
-  --color-panel-bg: rgba(6, 30, 65, 0.6);
-  --color-border: #1a4a85;
-  --color-accent: #00f0ff;
-  --color-accent-green: #00ff9d;
-  --color-accent-yellow: #ffcc00;
-  --color-accent-purple: #b366ff;
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #8ba0c8;
-  --color-critical: #ff4d4f;
-  --color-high: #ff9c40;
-  --color-medium: #ffd666;
-  --color-low: #52c41a;
+  // 基础背景色 (取自效果图底部深蓝黑)
+  --color-bg-primary: #011438;
+  --color-bg-secondary: #04204F;
+  
+  // 面板/卡片背景 (取自效果图中部蓝调)
+  --color-panel-bg: rgba(4, 32, 79, 0.60);
+  --color-accent-dim: rgba(48, 167, 209, 0.1);
+  
+  // 边框色 (取自效果图顶部深蓝)
+  --color-border: #0A5496;
+  
+  // 强调色 — 青色系 (取自效果图中部明亮青蓝 #30A7D1 ~ #3DC0DA)
+  --color-accent: #2FA7D1;
+  --color-accent-green: #40C9A0;
+  --color-accent-yellow: #F0C040;
+  --color-accent-purple: #8B80F0;
+  
+  // 文字色 (取自效果图亮色区域)
+  --color-text-primary: #E8ECF1;
+  --color-text-secondary: #8EA8C8;
+  
+  // 状态色
+  --color-critical: #E85555;
+  --color-high: #F09050;
+  --color-medium: #F0D060;
+  --color-low: #40C970;
+  
+  // 字体
   --font-digital: 'Orbitron', 'Share Tech Mono', monospace;
   --font-body: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  
+  // 间距
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
   --spacing-lg: 24px;
-  --shadow-glow: 0 0 10px rgba(0, 240, 255, 0.3);
-  --border-tech: 1px solid rgba(0, 240, 255, 0.2);
+  
+  // 特效
+  --shadow-glow: 0 0 12px rgba(48, 167, 209, 0.35);
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.3);
+  --border-tech: 1px solid rgba(48, 167, 209, 0.25);
 }
