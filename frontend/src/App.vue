@@ -23,6 +23,7 @@ const navItems = [
   { path: '/scada',     icon: 'Monitor',   label: 'SCADA看板' },
   { path: '/alarms',    icon: 'Bell',      label: '告警管理' },
   { path: '/monitor',   icon: 'Monitor',   label: '设备监控' },
+  { path: '/reports',   icon: 'Document',  label: '报表管理' },
   { path: '/knowledge', icon: 'Collection', label: '知识库' },
   { path: '/devices',   icon: 'Cpu',       label: '设备管理' },
   { path: '/settings',  icon: 'Setting',   label: '系统设置' },
