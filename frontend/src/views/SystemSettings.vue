@@ -54,13 +54,14 @@ onMounted(async () => {
             <div class="sd"><span class="s-dot online"></span> 知识库</div>
             <div class="st font-digital" style="color:#52c41a">160 条</div>
           </div>
-          <div class="status-card">
-            <div class="sd"><span class="s-dot"></span> OCR 引擎</div>
-            <div class="st font-digital" style="color:#ff9c40">未安装(可选)</div>
+          <div class="status-card ok">
+            <div class="sd"><span class="s-dot online"></span> OCR 引擎</div>
+            <div class="st font-digital" style="color:#52c41a">EasyOCR 1.7.2</div>
           </div>
           <div class="status-card">
-            <div class="sd"><span class="s-dot"></span> Neo4j</div>
-            <div class="st font-digital" style="color:#8892a4">未连接(可选)</div>
+            <div class="sd"><span class="s-dot"></span> Neo4j 图数据库</div>
+            <div class="st font-digital" style="color:#ff9c40">未运行(可选)</div>
+            <div class="st-hint">自动降级 NetworkX</div>
           </div>
           <div class="status-card ok">
             <div class="sd"><span class="s-dot online"></span> Docker</div>
