@@ -38,7 +38,8 @@ class TestConcurrency:
         def request_dashboard(idx):
             r = client.get("/api/dashboard")
             data = r.json()
-            return data.get("project", "")
+            inner = data.get("data", data)
+            return inner.get("project", "")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=30) as pool:
             futures = [pool.submit(request_dashboard, i) for i in range(30)]

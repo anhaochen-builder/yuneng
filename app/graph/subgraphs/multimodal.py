@@ -160,6 +160,14 @@ _cached_st_model = None
 
 
 def _cross_attention_fuse(text: str, image_text: str, audio_text: str) -> str:
+    try:
+        from app.multimodal.fusion import fusion_service
+        result = fusion_service.fuse(text, image_text, audio_text)
+        if result.get("fused_text"):
+            return result["fused_text"]
+    except Exception as e:
+        logger.debug(f"Cross-Attention 模块调用失败，降级: {e}")
+
     global _cached_st_model
     result_parts = []
     try:

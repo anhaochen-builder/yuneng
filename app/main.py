@@ -10,9 +10,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 from app.api import chat, diagnosis, alarm, knowledge, feedback, trace, scada, dashboard, audit
@@ -36,6 +37,66 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ================================================================
+# 统一响应中间件 — {code, data, message}
+# ================================================================
+
+class UnifiedResponseMiddleware(BaseHTTPMiddleware):
+    """将非流式 JSON 响应统一包装为 {code: 0, data: ..., message: 'success'}"""
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+
+        content_type = response.headers.get("content-type", "")
+        # 跳过流式/HTML/文件等非 JSON 响应
+        if isinstance(response, StreamingResponse):
+            return response
+        if "text/event-stream" in content_type:
+            return response
+        if "text/html" in content_type:
+            return response
+        if request.url.path in ("/openapi.json", "/docs", "/redoc"):
+            return response
+
+        if 200 <= response.status_code < 300:
+            body = b""
+            async for chunk in response.body_iterator:
+                body += chunk
+
+            if not body:
+                return JSONResponse(
+                    status_code=response.status_code,
+                    content={"code": 0, "data": None, "message": "success"},
+                    headers=dict(response.headers),
+                )
+
+            try:
+                import json
+                data = json.loads(body)
+                # 已是标准格式则透传
+                if isinstance(data, dict) and "code" in data and "data" in data:
+                    return JSONResponse(
+                        status_code=response.status_code,
+                        content=data,
+                        headers=dict(response.headers),
+                    )
+                return JSONResponse(
+                    status_code=response.status_code,
+                    content={"code": 0, "data": data, "message": "success"},
+                    headers=dict(response.headers),
+                )
+            except Exception:
+                return JSONResponse(
+                    status_code=response.status_code,
+                    content={"code": 0, "data": body.decode("utf-8", errors="replace"), "message": "success"},
+                    headers=dict(response.headers),
+                )
+
+        return response
+
+
+app.add_middleware(UnifiedResponseMiddleware)
 
 # ================================================================
 # 统一异常处理

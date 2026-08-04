@@ -3,6 +3,7 @@
 import json
 import pytest
 from fastapi.testclient import TestClient
+from conftest import unwrap
 
 
 @pytest.fixture
@@ -17,11 +18,11 @@ class TestHealth:
     def test_health_ok(self, client):
         r = client.get("/health")
         assert r.status_code == 200
-        assert r.json()["status"] == "healthy"
+        assert unwrap(r)["status"] == "healthy"
 
     def test_health_has_version(self, client):
         r = client.get("/health")
-        assert "version" in r.json()
+        assert "version" in unwrap(r)
 
     def test_health_method_not_allowed(self, client):
         r = client.post("/health")
@@ -34,14 +35,14 @@ class TestDashboard:
     def test_dashboard_ok(self, client):
         r = client.get("/api/dashboard")
         assert r.status_code == 200
-        data = r.json()
+        data = unwrap(r)
         assert "progress" in data
         assert "phases" in data
 
     def test_dashboard_phases(self, client):
         r = client.get("/api/dashboard/phases")
         assert r.status_code == 200
-        phases = r.json()["phases"]
+        phases = unwrap(r)["phases"]
         assert "phase1" in phases
         assert "phase2" in phases
         assert "phase3" in phases
@@ -50,12 +51,12 @@ class TestDashboard:
     def test_dashboard_phase_detail(self, client):
         r = client.get("/api/dashboard/phases/phase3")
         assert r.status_code == 200
-        assert r.json()["status"] == "completed"
+        assert unwrap(r)["status"] == "completed"
 
     def test_dashboard_phase_not_found(self, client):
         r = client.get("/api/dashboard/phases/phase99")
         assert r.status_code == 200
-        assert "error" in r.json()
+        assert "error" in unwrap(r)
 
     def test_dashboard_tasks(self, client):
         r = client.get("/api/dashboard/tasks?status=completed")
@@ -68,7 +69,7 @@ class TestDashboard:
     def test_dashboard_mode(self, client):
         r = client.get("/api/dashboard/mode")
         assert r.status_code == 200
-        assert "current" in r.json()
+        assert "current" in unwrap(r)
 
 
 # ─── Audit ───
@@ -77,13 +78,13 @@ class TestAudit:
     def test_audit_ok(self, client):
         r = client.get("/api/audit")
         assert r.status_code == 200
-        data = r.json()
+        data = unwrap(r)
         assert data["overall"]["grade"] in ("A", "B", "C")
 
     def test_audit_skills(self, client):
         r = client.get("/api/audit/skills")
         assert r.status_code == 200
-        assert r.json()["all_mapped"] == True
+        assert unwrap(r)["all_mapped"] == True
 
     def test_audit_files(self, client):
         r = client.get("/api/audit/files")
@@ -100,7 +101,7 @@ class TestSkills:
     def test_skills_list(self, client):
         r = client.get("/api/skills")
         assert r.status_code == 200
-        data = r.json()
+        data = unwrap(r)
         assert len(data["skills"]) >= 6
         assert len(data["sub_agents"]) >= 6
 
@@ -122,7 +123,7 @@ class TestKnowledge:
             "top_k": 3,
         })
         assert r.status_code == 200
-        data = r.json()
+        data = unwrap(r)
         assert "results" in data or "result" in data
 
     def test_search_empty_query(self, client):
@@ -177,7 +178,7 @@ class TestChat:
             "question": "什么是逆变器IGBT？",
         })
         assert r.status_code == 200
-        data = r.json()
+        data = unwrap(r)
         assert "answer" in data or "response" in data or "reply" in data
 
     def test_chat_stream(self, client):
@@ -296,7 +297,7 @@ class TestDiagnosis:
         })
         assert r.status_code in (200, 408, 500)
         if r.status_code == 200:
-            data = r.json()
+            data = unwrap(r)
             assert "task_id" in data or "result" in data or "message" in data
 
     def test_diagnose_stream(self, client):
@@ -327,12 +328,12 @@ class TestDiagnosis:
     def test_diagnose_history(self, client):
         r = client.get("/api/diagnose/history")
         assert r.status_code == 200
-        assert "history" in r.json()
+        assert "history" in unwrap(r)
 
     def test_diagnose_report_not_found(self, client):
         r = client.get("/api/diagnose/report/nonexistent-id")
         assert r.status_code == 200
-        assert not r.json().get("found", True)
+        assert not unwrap(r).get("found", True)
 
 
 # ─── Graph 编排全链路 ───
@@ -446,7 +447,7 @@ class TestSSEStreaming:
         })
         assert diag_r.status_code in (200, 408, 500)
         if diag_r.status_code == 200:
-            task_id = diag_r.json().get("task_id", "unknown")
+            task_id = unwrap(diag_r).get("task_id", "unknown")
 
             fb_r = client.post("/api/feedback", json={
                 "task_id": task_id,
