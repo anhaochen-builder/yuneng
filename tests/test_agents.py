@@ -88,9 +88,9 @@ class TestMultiModel:
 class TestDiagnosisAgent:
     def test_diagnose_returns_report(self, sample_symptoms):
         from app.agent.diagnosis_agent import DiagnosisAgent
-        from app.rag.hybrid_search import HybridSearchService
-        search = HybridSearchService()
-        rag = search.search(sample_symptoms, top_k=3)
+        from app.rag.hybrid_search import get_knowledge_store
+        store = get_knowledge_store()
+        rag = store.search(sample_symptoms, top_k=3)
         rag_text = "; ".join([r["text"][:200] for r in rag])
         context = f"故障描述:\n{sample_symptoms}\n\n知识库:\n{rag_text}"
         agent = DiagnosisAgent()
@@ -100,9 +100,9 @@ class TestDiagnosisAgent:
 
     def test_confidence_in_range(self, sample_symptoms):
         from app.agent.diagnosis_agent import DiagnosisAgent
-        from app.rag.hybrid_search import HybridSearchService
-        search = HybridSearchService()
-        rag = search.search(sample_symptoms, top_k=3)
+        from app.rag.hybrid_search import get_knowledge_store
+        store = get_knowledge_store()
+        rag = store.search(sample_symptoms, top_k=3)
         rag_text = "; ".join([r["text"][:200] for r in rag])
         context = f"故障描述:\n{sample_symptoms}\n\n知识库:\n{rag_text}"
         agent = DiagnosisAgent()
