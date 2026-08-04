@@ -3,8 +3,6 @@ import { ref, nextTick, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSSE } from '@/hooks/useSSE'
 import { feedbackApi } from '@/api'
-import LangGraphTopology from '@/components/LangGraphTopology.vue'
-import MemorySystemPanel from '@/components/MemorySystemPanel.vue'
 
 const route = useRoute()
 const { isStreaming, currentStep, streamedContent, diagnosisReport, error, sendMessage, abort } = useSSE()
@@ -13,8 +11,6 @@ const chatMessages = ref<Array<{ role: string; content: string; timestamp: strin
 const messagesEnd = ref<HTMLElement | null>(null)
 const feedbackGiven = ref(false)
 const feedbackResult = ref('')
-const showTopology = ref(false)
-const showMemory = ref(false)
 
 // 多模态文件
 const uploadedImages = ref<Array<{ file: File; preview: string; type: string }>>([])
@@ -24,31 +20,11 @@ const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const audioInput = ref<HTMLInputElement | null>(null)
 
-// 模拟拓扑步骤
-const topoSteps = ref<Array<{ node: string; status: 'done' | 'running' | 'pending' | 'error' | 'retry' }>>([
-  { node: 'START', status: 'done' },
-  { node: 'PreCheck', status: 'done' },
-  { node: 'ContextLoad', status: 'done' },
-  { node: 'IntentRouter', status: 'running' },
-  { node: 'DiagAgent', status: 'pending' },
-  { node: 'JudgeEval', status: 'pending' },
-  { node: 'SafetyReview', status: 'pending' },
-  { node: 'FinalResponse', status: 'pending' },
-  { node: 'MemorySave', status: 'pending' },
-  { node: 'END', status: 'pending' },
-])
-
 const quickActions = [
   '3号逆变器通讯中断，后台报ALM-001',
   '1号风机齿轮箱油温超过80°C，振动值升高',
   '变压器油温异常，当前85°C，DGA氢气超标',
   '光伏逆变器直流侧绝缘阻抗降低至300kΩ',
-]
-
-const recentHistory = [
-  { id: 'DX-20260804-001', desc: '1号风机振动超标停机', time: '10:32', risk: 'HIGH' },
-  { id: 'DX-20260804-002', desc: '3号逆变器通讯中断', time: '09:15', risk: 'CRITICAL' },
-  { id: 'DX-20260803-008', desc: '变压器油温异常', time: '昨天 16:40', risk: 'MEDIUM' },
 ]
 
 function scrollBottom() { nextTick(() => messagesEnd.value?.scrollIntoView({ behavior: 'smooth' })) }
@@ -69,10 +45,7 @@ async function send() {
   chatMessages.value.push({ role: 'user', content: displayText, timestamp: new Date().toLocaleTimeString() })
   inputText.value = ''
   feedbackGiven.value = false
-  showTopology.value = true
   await scrollBottom()
-
-  simulateTopoSteps()
 
   const apiBase = import.meta.env.VITE_API_BASE_URL || ''
   if (hasMultimodal) {
@@ -90,24 +63,6 @@ async function send() {
   showUploadPanel.value = false
 
   await scrollBottom()
-}
-
-function simulateTopoSteps() {
-  const steps = ['DiagAgent', 'JudgeEval', 'SafetyReview', 'FinalResponse', 'MemorySave', 'END']
-  let delay = 800
-  steps.forEach((node, i) => {
-    setTimeout(() => {
-      // 标记之前的为 done
-      topoSteps.value.forEach(s => { if (s.status === 'running') s.status = 'done' })
-      // 当前为 running
-      const target = topoSteps.value.find(s => s.node === node)
-      if (target) target.status = 'running'
-    }, delay * (i + 1))
-  })
-  // 全部完成
-  setTimeout(() => {
-    topoSteps.value.forEach(s => { if (s.status === 'running') s.status = 'done' })
-  }, delay * (steps.length + 1))
 }
 
 function useQuick(text: string) { inputText.value = text; send() }
