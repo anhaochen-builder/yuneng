@@ -293,75 +293,103 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
       </div>
     </div>
 
-    <!-- 中间: 拓扑 + 最近历史 -->
-    <div class="middle-panels" v-if="showTopology || chatMessages.length">
-      <div class="tech-card" v-if="showTopology">
-        <h4>🔄 诊断流程编排</h4>
-        <LangGraphTopology :steps="topoSteps" />
-      </div>
-
-      <div class="tech-card" v-if="!showTopology && recentHistory.length">
-        <h4>📋 最近诊断</h4>
-        <div class="history-list">
-          <div v-for="h in recentHistory" :key="h.id" class="history-item">
-            <div class="hi-header">
-              <span class="hi-id font-digital">{{ h.id }}</span>
-              <el-tag size="small" :type="h.risk === 'CRITICAL' ? 'danger' : h.risk === 'HIGH' ? 'warning' : 'info'">{{ h.risk }}</el-tag>
-            </div>
-            <div class="hi-desc">{{ h.desc }}</div>
-            <div class="hi-time">{{ h.time }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 右侧: 报告 + 记忆面板 -->
-    <div class="right-panels">
+    <!-- 右侧: 完整诊断报告 -->
+    <div class="report-panel" v-if="diagnosisReport || chatMessages.length > 0">
       <div class="tech-card report-card" v-if="diagnosisReport">
-        <h4>🔧 诊断报告</h4>
-        <div v-if="diagnosisReport.root_causes?.length" class="section">
-          <div class="section-title">可能原因</div>
-          <div v-for="(c, i) in diagnosisReport.root_causes" :key="i" class="cause-row">
-            <span class="cause-rank">#{{ Number(i) + 1 }}</span>
-            <span class="cause-text">{{ c.cause }}</span>
-            <span class="cause-prob" :style="{ color: c.probability > 0.7 ? '#ff4d4f' : c.probability > 0.4 ? '#ff9c40' : '#52c41a' }">
-              {{ ((Number(c.probability) || 0) * 100).toFixed(0) }}%
+        <div class="report-header">
+          <h4>🔧 诊断报告</h4>
+          <div class="report-badges">
+            <el-tag v-if="diagnosisReport.risk_level" :type="diagnosisReport.risk_level === 'CRITICAL' ? 'danger' : diagnosisReport.risk_level === 'HIGH' ? 'warning' : 'info'" effect="dark">{{ diagnosisReport.risk_level }}</el-tag>
+            <span class="report-confidence font-digital" :style="{color: (Number(diagnosisReport.confidence)||0) > 0.85 ? '#52c41a' : (Number(diagnosisReport.confidence)||0) > 0.7 ? '#ff9c40' : '#ff4d4f'}">
+              {{ ((Number(diagnosisReport.confidence) || 0) * 100).toFixed(0) }}%
             </span>
           </div>
         </div>
-        <div class="section">
-          <div class="section-title">综合置信度</div>
-          <el-progress :percentage="Math.round((Number(diagnosisReport.confidence) || 0) * 100)" :color="(p: number) => p > 70 ? '#52c41a' : p > 40 ? '#ff9c40' : '#ff4d4f'" :stroke-width="10" />
+
+        <!-- 1. 告警摘要 -->
+        <div v-if="diagnosisReport.alert_summary" class="report-section">
+          <div class="rs-title">📋 告警摘要</div>
+          <div class="rs-body">{{ diagnosisReport.alert_summary }}</div>
         </div>
-        <div v-if="diagnosisReport.risk_level" class="section">
-          <div class="section-title">风险等级</div>
-          <el-tag :type="diagnosisReport.risk_level === 'CRITICAL' ? 'danger' : diagnosisReport.risk_level === 'HIGH' ? 'warning' : 'info'" size="large" effect="dark">
-            {{ diagnosisReport.risk_level }}
-          </el-tag>
-        </div>
-        <div v-if="diagnosisReport.suggestions?.length" class="section">
-          <div class="section-title">处置建议</div>
-          <div v-for="(s, i) in diagnosisReport.suggestions" :key="i" class="suggestion-item">
-            <el-icon color="var(--color-accent)"><component is="Check" /></el-icon>
-            <span>{{ s }}</span>
+
+        <!-- 2. 可能原因 -->
+        <div v-if="diagnosisReport.root_causes?.length" class="report-section">
+          <div class="rs-title">🔍 可能原因 ({{ diagnosisReport.root_causes.length }}项)</div>
+          <div v-for="(c, i) in diagnosisReport.root_causes" :key="i" class="cause-card">
+            <div class="cause-header">
+              <span class="cause-rank">#{{ Number(i) + 1 }}</span>
+              <span class="cause-title">{{ c.cause }}</span>
+              <span class="cause-prob font-digital" :style="{ color: (c.probability || 0) > 0.7 ? '#ff4d4f' : (c.probability || 0) > 0.4 ? '#ff9c40' : '#52c41a' }">{{ ((Number(c.probability) || 0) * 100).toFixed(0) }}%</span>
+            </div>
+            <div v-if="c.evidence?.length" class="cause-evidence">
+              <span v-for="(e, j) in c.evidence" :key="j" class="evidence-tag">{{ e }}</span>
+            </div>
           </div>
         </div>
-        <div v-if="!feedbackGiven" class="section feedback">
-          <div class="section-title">评价诊断结果</div>
-          <div class="fb-btns">
+
+        <!-- 3. 详细分析 -->
+        <div v-if="diagnosisReport.analysis || diagnosisReport.detail" class="report-section">
+          <div class="rs-title">📝 详细分析</div>
+          <div class="rs-body">{{ diagnosisReport.analysis || diagnosisReport.detail }}</div>
+        </div>
+
+        <!-- 4. 处置建议 -->
+        <div v-if="diagnosisReport.recommendations?.length || diagnosisReport.suggestions?.length" class="report-section">
+          <div class="rs-title">🛠 处置建议</div>
+          <div v-for="(r, i) in (diagnosisReport.recommendations || diagnosisReport.suggestions || [])" :key="i" class="rec-item">
+            <span class="rec-num">{{ i + 1 }}.</span>
+            <span>{{ r }}</span>
+          </div>
+        </div>
+
+        <!-- 5. 处置方案步骤 -->
+        <div v-if="diagnosisReport.action_plan?.steps?.length" class="report-section">
+          <div class="rs-title">📋 操作步骤</div>
+          <div v-for="(s, i) in diagnosisReport.action_plan.steps" :key="i" class="step-card">
+            <div class="step-header">
+              <span class="step-order">步骤 {{ s.order || i + 1 }}</span>
+              <span class="step-action">{{ s.action }}</span>
+            </div>
+            <div v-if="s.detail" class="step-detail">{{ s.detail }}</div>
+            <div v-if="s.safety_note" class="step-safety">⚠️ {{ s.safety_note }}</div>
+          </div>
+          <div v-if="diagnosisReport.action_plan?.tools_required?.length" class="tools-row">
+            <span class="tools-label">所需工具：</span>
+            <el-tag v-for="t in diagnosisReport.action_plan.tools_required" :key="t" size="small" effect="plain" class="tool-tag">{{ t }}</el-tag>
+          </div>
+          <div v-if="diagnosisReport.action_plan?.estimated_time" class="est-time">⏱ 预计耗时：{{ diagnosisReport.action_plan.estimated_time }}</div>
+          <div v-if="diagnosisReport.action_plan?.safety_notes?.length" class="safety-notes">
+            <div v-for="(sn, i) in diagnosisReport.action_plan.safety_notes" :key="i" class="safety-note">🛡 {{ sn }}</div>
+          </div>
+        </div>
+
+        <!-- 6. 安全审查 -->
+        <div v-if="diagnosisReport.safety_check" class="report-section">
+          <div class="rs-title">🛡 安全审查</div>
+          <div v-if="diagnosisReport.safety_check.violations?.length" class="safety-violations">
+            <div v-for="(v, i) in diagnosisReport.safety_check.violations" :key="i" class="violation-item">❌ {{ v }}</div>
+          </div>
+          <div v-if="diagnosisReport.safety_check.suggestions?.length">
+            <div v-for="(s, i) in diagnosisReport.safety_check.suggestions" :key="i" class="safety-suggestion">💡 {{ s }}</div>
+          </div>
+          <div v-if="!diagnosisReport.safety_check.violations?.length" class="safety-pass">✅ 安全审查通过，无违规项</div>
+        </div>
+
+        <!-- 反馈 -->
+        <div class="report-section feedback-section">
+          <div v-if="!feedbackGiven" class="fb-btns">
             <el-button size="small" type="success" @click="submitFeedback('accurate')" plain>👍 准确</el-button>
             <el-button size="small" type="warning" @click="submitFeedback('partially_accurate')" plain>🤔 部分准确</el-button>
             <el-button size="small" type="danger" @click="submitFeedback('inaccurate')" plain>👎 不准确</el-button>
           </div>
+          <div v-else class="fb-result">{{ feedbackResult }}</div>
         </div>
-        <div v-else class="feedback-result">{{ feedbackResult }}</div>
       </div>
 
-      <MemorySystemPanel v-if="showMemory" 
-        :short-term="[{ question: '逆变器通讯中断原因', answer: 'IGBT模块过热导致保护动作，通讯模块供电异常', time: '10:32' }]"
-        :work-memory="{ intent: '故障诊断', confidence: 0.92, entities: { device: 'INV003', type: '通讯中断' }, judge_score: 85 }"
-        :long-term="{ totalCases: 160, recentCases: [{ deviceType: '逆变器', faultType: '通讯中断', time: '2026-08-01', confidence: 0.88 }, { deviceType: '风机', faultType: '振动超标', time: '2026-07-30', confidence: 0.92 }] }"
-      />
+      <div v-else-if="!isStreaming && chatMessages.length > 0" class="tech-card empty-report">
+        <h4>📋 诊断报告</h4>
+        <p>诊断完成后，完整的结构化报告将在此展示</p>
+      </div>
 
       <div v-if="error" class="tech-card error-card">
         <h4 style="color:var(--color-critical)">❌ 诊断出错</h4>
@@ -480,6 +508,55 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
 .feedback { .fb-btns { display: flex; gap: 6px; flex-wrap: wrap; } }
 .feedback-result { font-size: 13px; color: #52c41a; padding: 8px 0; }
 .error-card { border-color: rgba(255,77,79,0.3); p { font-size: 13px; color: var(--color-text-secondary); } }
+
+// ── 右侧报告面板 ──
+.report-panel { width: 420px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.report-card { h4 { color: var(--color-accent); margin: 0; font-size: 15px; } }
+.report-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.report-badges { display: flex; align-items: center; gap: 10px; }
+.report-confidence { font-size: 18px; font-weight: 700; }
+
+.report-section { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid rgba(0,240,255,0.06);
+  &:last-child { border-bottom: none; margin-bottom: 0; }
+}
+.rs-title { font-size: 13px; color: var(--color-accent); margin-bottom: 8px; font-weight: 600; }
+.rs-body { font-size: 13px; color: var(--color-text-secondary); line-height: 1.8; }
+
+.cause-card { padding: 10px 12px; background: rgba(0,240,255,0.03); border-radius: 6px; margin-bottom: 8px; border: 1px solid rgba(0,240,255,0.06); }
+.cause-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.cause-rank { font-weight: 700; color: var(--color-accent); }
+.cause-title { flex: 1; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
+.cause-prob { font-size: 14px; font-weight: 700; }
+.cause-evidence { display: flex; flex-wrap: wrap; gap: 4px; }
+.evidence-tag { font-size: 10px; padding: 2px 8px; background: rgba(0,240,255,0.08); border-radius: 3px; color: var(--color-text-secondary); }
+
+.rec-item { display: flex; gap: 6px; padding: 5px 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; }
+.rec-num { color: var(--color-accent); font-weight: 600; min-width: 20px; }
+
+.step-card { padding: 10px 12px; background: rgba(82,196,26,0.05); border-radius: 6px; margin-bottom: 8px; border: 1px solid rgba(82,196,26,0.12); }
+.step-header { display: flex; gap: 8px; margin-bottom: 4px; }
+.step-order { color: #52c41a; font-weight: 600; font-size: 12px; }
+.step-action { font-size: 13px; color: var(--color-text-primary); font-weight: 600; }
+.step-detail { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+.step-safety { font-size: 11px; color: #ff9c40; margin-top: 4px; }
+.tools-row { margin-top: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tools-label { font-size: 12px; color: var(--color-text-secondary); }
+.tool-tag { margin: 2px; }
+.est-time { font-size: 12px; color: var(--color-text-secondary); margin-top: 6px; }
+.safety-notes { margin-top: 6px; }
+.safety-note { font-size: 12px; color: #ff9c40; padding: 2px 0; }
+
+.safety-violations, .safety-suggestion { font-size: 12px; padding: 3px 0; }
+.safety-pass { font-size: 12px; color: #52c41a; }
+
+.feedback-section { padding-top: 10px; }
+.fb-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.fb-result { font-size: 13px; color: #52c41a; padding: 8px 0; }
+
+.empty-report { text-align: center; padding: 40px 20px; color: var(--color-text-secondary);
+  h4 { margin-bottom: 10px; }
+  p { font-size: 13px; }
+}
 
 // ── 多模态上传面板 ──
 .upload-panel {
