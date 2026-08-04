@@ -47,7 +47,30 @@ class ProtocolFactory:
         return DEVICE_PROTOCOL_MAP.get(device_type, "modbus")
 
     @staticmethod
-    def create(config: DeviceConfig, mock_mode: bool = False) -> Optional[ProtocolAdapter]:
+    def auto_mode() -> bool:
+        """根据环境变量自动选择模式: SCADA_MOCK_MODE=true/false/auto, 默认mock"""
+        import os
+        mode = os.getenv("SCADA_MOCK_MODE", "true").lower()
+        if mode == "false":
+            return False
+        if mode == "auto":
+            try:
+                import socket
+                s = socket.socket()
+                s.settimeout(1)
+                s.connect(("127.0.0.1", 502))
+                s.close()
+                logger.info("Modbus 502端口可达，切换到真实模式")
+                return False
+            except Exception:
+                logger.info("SCADA 端口不可达，使用模拟模式")
+                return True
+        return True
+
+    @staticmethod
+    def create(config: DeviceConfig, mock_mode: Optional[bool] = None) -> Optional[ProtocolAdapter]:
+        if mock_mode is None:
+            mock_mode = ProtocolFactory.auto_mode()
         protocol = config.protocol or ProtocolFactory.resolve_protocol(config.device_type)
 
         adapters = {

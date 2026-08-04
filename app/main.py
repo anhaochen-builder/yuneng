@@ -98,8 +98,10 @@ app.include_router(audit.router)
 async def startup_event():
     """启动时注册所有子智能体"""
     from app.graph.sub_agent_init import register_all
+    from app.graph.sub_agent import sub_agent_registry
+    from app.skill.registry import skill_registry
     register_all()
-    logger.info("所有子智能体已注册: 6 个 SubAgent, 6 个 Skill")
+    logger.info(f"所有子智能体已注册: {len(sub_agent_registry._agents)} 个 SubAgent, {len(skill_registry._skills)} 个 Skill")
 
 
 @app.get("/health")

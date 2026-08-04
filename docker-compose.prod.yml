@@ -1,0 +1,97 @@
+version: '3.8'
+
+# 驭能 — 生产环境 Docker Compose 配置
+# 使用: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: yuneng-api
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+      - DEEPSEEK_REASONER_MODEL=${DEEPSEEK_REASONER_MODEL:-deepseek-reasoner}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - DIAGNOSIS_MODE=${DIAGNOSIS_MODE:-ensemble}
+      - OFFLINE_MODE=${OFFLINE_MODE:-auto}
+      - QWEN_LOCAL_PATH=${QWEN_LOCAL_PATH:-}
+      - VECTOR_DB_PATH=/app/knowledge_db
+      - KNOWLEDGE_PATH=/app/data
+      - API_HOST=0.0.0.0
+      - API_PORT=8080
+      - MCP_PORT=9901
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATA_DIR=/app/data
+      - RAW_DATA_DIR=/app/data/raw
+      - PROCESSED_DATA_DIR=/app/data/processed
+    volumes:
+      - yuneng_data:/app/data
+      - yuneng_knowledge:/app/knowledge_db
+      - yuneng_logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2"
+        reservations:
+          memory: 1G
+          cpus: "1"
+    networks:
+      - yuneng-net
+
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    container_name: yuneng-mcp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import mcp_server.tools"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "2"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    networks:
+      - yuneng-net
+    profiles:
+      - mcp
+
+volumes:
+  yuneng_data:
+    driver: local
+  yuneng_knowledge:
+    driver: local
+  yuneng_logs:
+    driver: local
+
+networks:
+  yuneng-net:
+    driver: bridge

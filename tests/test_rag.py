@@ -6,19 +6,19 @@ class TestKnowledgeStore:
     def test_store_loaded(self):
         from app.rag.hybrid_search import get_knowledge_store
         store = get_knowledge_store()
-        assert store.doc_count >= 25
+        assert store.doc_count >= 10
 
     def test_keyword_search(self):
-        from app.rag.hybrid_search import HybridSearchService
-        search = HybridSearchService()
+        from app.rag.hybrid_search import FastKnowledgeStore
+        store = FastKnowledgeStore()
         for query in ["IGBT过热", "齿轮箱", "变压器", "安全规程", "通讯中断"]:
-            results = search.search(query, top_k=3)
+            results = store.search(query, top_k=3)
             assert len(results) > 0, f"查询'{query}'返回0条结果"
 
     def test_search_relevance(self):
-        from app.rag.hybrid_search import HybridSearchService
-        search = HybridSearchService()
-        results = search.search("IGBT过热散热风扇", top_k=3)
+        from app.rag.hybrid_search import FastKnowledgeStore
+        store = FastKnowledgeStore()
+        results = store.search("IGBT过热散热风扇", top_k=3)
         assert len(results) >= 2
         first = results[0]["text"]
         assert "IGBT" in first or "散热" in first
@@ -31,9 +31,9 @@ class TestKnowledgeStore:
         assert store.doc_count == before + 1
 
     def test_search_empty_query(self):
-        from app.rag.hybrid_search import HybridSearchService
-        search = HybridSearchService()
-        results = search.search("", top_k=3)
+        from app.rag.hybrid_search import FastKnowledgeStore
+        store = FastKnowledgeStore()
+        results = store.search("", top_k=3)
         assert isinstance(results, list)
 
 

@@ -66,8 +66,8 @@ class CaseIngestionService:
         )
 
         try:
-            from app.memory.memory_service import MemoryService
-            memory = MemoryService()
+            from app.memory.memory_service import get_memory
+            memory = get_memory()
             count = memory.save_long_term(full_text, meta, task_id)
             result["success"] = count > 0
             result["ingested_at"] = datetime.now().isoformat()
@@ -82,8 +82,8 @@ class CaseIngestionService:
     def count_by_fault_type(self, fault_type: str) -> int:
         query = "故障类型 " + fault_type
         try:
-            from app.memory.memory_service import MemoryService
-            memory = MemoryService()
+            from app.memory.memory_service import get_memory
+            memory = get_memory()
             results = memory.search_long_term(query, top_k=50, device_type=fault_type)
             return len(results)
         except Exception:
@@ -91,8 +91,8 @@ class CaseIngestionService:
 
     def get_similar_cases(self, fault_type: str, limit: int = 3) -> list[dict]:
         try:
-            from app.memory.memory_service import MemoryService
-            memory = MemoryService()
+            from app.memory.memory_service import get_memory
+            memory = get_memory()
             return memory.search_long_term(fault_type, top_k=limit, device_type=fault_type)
         except Exception:
             return []

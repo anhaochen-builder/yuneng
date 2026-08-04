@@ -89,9 +89,9 @@ def _count_total_samples() -> int:
 
 def _handle_accurate(task_id: str, record: dict):
     from app.learning.case_ingestion import CaseIngestionService
-    from app.memory.memory_service import MemoryService
+    from app.memory.memory_service import get_memory
 
-    memory = MemoryService()
+    memory = get_memory()
     task_ctx = memory._tasks.get(task_id, {})
     diagnosis_text = task_ctx.get("diagnosis_text", "")
 

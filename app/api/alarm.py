@@ -11,12 +11,12 @@ from fastapi.responses import StreamingResponse
 from app.models.schemas import AlarmRequest
 from app.graph.builder import get_graph
 from app.graph.state_keys import StateKeys as K
-from app.memory.memory_service import MemoryService
+from app.memory.memory_service import get_memory
 from app.skill.registry import skill_registry
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/alarm", tags=["alarm"])
-memory = MemoryService()
+memory = get_memory()
 
 
 @router.get("/health")

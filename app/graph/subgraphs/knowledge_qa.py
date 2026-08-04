@@ -45,6 +45,7 @@ class KnowledgeQASubAgent(BaseSubAgent):
         builder.add_node("rerank", self._rerank_node)
         builder.add_node("answer", self._answer_node)
         builder.add_node("review", self._review_node)
+        builder.add_node("citation", self._citation_node)
 
         builder.add_edge(START, "query_rewrite")
         builder.add_edge("query_rewrite", "rag_retrieve")
@@ -55,8 +56,9 @@ class KnowledgeQASubAgent(BaseSubAgent):
         builder.add_conditional_edges(
             "review",
             self._review_router,
-            {"retry": "rag_retrieve", "accept": END},
+            {"retry": "rag_retrieve", "accept": "citation"},
         )
+        builder.add_edge("citation", END)
 
     def _query_rewrite_node(self, state: dict[str, Any]) -> dict[str, Any]:
         query = state.get(K.CLEANED_INPUT, state.get(K.INPUT, ""))
@@ -92,7 +94,45 @@ class KnowledgeQASubAgent(BaseSubAgent):
         return {K.RAG_RESULTS: rag_text, K.EXECUTION_RESULT: rag_text}
 
     def _rerank_node(self, state: dict[str, Any]) -> dict[str, Any]:
-        return {}
+        """BGE Reranker 交叉编码精排 — 对 RAG 检索结果二次排序"""
+        query = state.get(K.REWRITTEN_QUERY, state.get(K.INPUT, ""))
+        rag_text = state.get(K.RAG_RESULTS, "")
+
+        try:
+            from app.rag.rerank import BGECrossEncoderReranker
+
+            # 从 rag_text 中解析出各参考条目
+            import re
+            ref_pattern = re.compile(r'\[参考(\d+)\]\s*(.+?)(?=\[参考\d+\]|$)', re.DOTALL)
+            matches = ref_pattern.findall(rag_text)
+
+            if len(matches) <= 1:
+                return {}  # 太少条目无需重排
+
+            results = []
+            for idx, text in matches:
+                results.append({"id": f"ref_{idx}", "text": text.strip()[:1000], "score": 0.5})
+
+            reranker = BGECrossEncoderReranker()
+            reranked = reranker.rerank(query, results, top_k=5)
+
+            # 重新构建排序后的 RAG 文本
+            kg_prefix = ""
+            if not rag_text.startswith("[参考"):
+                kg_prefix = rag_text.split("[参考1]")[0] if "[参考1]" in rag_text else ""
+
+            reranked_parts = []
+            if kg_prefix:
+                reranked_parts.append(kg_prefix.strip())
+            for i, doc in enumerate(reranked):
+                reranked_parts.append(f"[参考{i+1}] {doc['text']}")
+
+            new_rag_text = "\n\n".join(reranked_parts)
+            logger.info(f"  Rerank: {len(matches)}条 → {len(reranked)}条精排")
+            return {K.RAG_RESULTS: new_rag_text}
+        except Exception as e:
+            logger.warning(f"Rerank 节点降级: {e}")
+            return {}
 
     def _answer_node(self, state: dict[str, Any]) -> dict[str, Any]:
         question = state.get(K.INPUT, "")
@@ -125,3 +165,36 @@ class KnowledgeQASubAgent(BaseSubAgent):
         if decision == "NEED_MORE" and loop < 2:
             return "retry"
         return "accept"
+
+    def _citation_node(self, state: dict[str, Any]) -> dict[str, Any]:
+        answer = state.get(K.FINAL_RESPONSE, "")
+        rag_context = state.get(K.RAG_RESULTS, "")
+
+        if not rag_context or not answer:
+            return {}
+
+        sources = _extract_sources(rag_context)
+        if not sources:
+            return {}
+
+        cited_answer = _append_citations(answer, sources)
+        return {K.FINAL_RESPONSE: cited_answer}
+
+
+def _extract_sources(rag_text: str) -> list[str]:
+    sources = []
+    for line in rag_text.split("\n"):
+        line = line.strip()
+        if line.startswith("[参考"):
+            sources.append(line[:200])
+    return sources
+
+
+def _append_citations(answer: str, sources: list[str]) -> str:
+    cited = answer.rstrip()
+    if not cited.endswith("\n"):
+        cited += "\n"
+    cited += "\n---\n**参考来源：**\n"
+    for i, src in enumerate(sources[:5]):
+        cited += f"\n[{i+1}] {src}"
+    return cited

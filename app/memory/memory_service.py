@@ -217,3 +217,13 @@ class MemoryService:
         history_text = self.get_session_history(session_id)
         skill_context = task_ctx.get("skill_context", "")
         return "\n".join(memory_parts), skill_context, history_text
+
+
+_memory_instance = None
+
+
+def get_memory() -> MemoryService:
+    global _memory_instance
+    if _memory_instance is None:
+        _memory_instance = MemoryService()
+    return _memory_instance

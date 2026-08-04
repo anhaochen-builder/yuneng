@@ -99,7 +99,6 @@ class MultiModalSubAgent(BaseSubAgent):
         return {"_audio_analysis": audio_result, "_audio_text": audio_text}
 
     def _fusion_node(self, state: dict[str, Any]) -> dict[str, Any]:
-        """Cross-Attention 多模态融合"""
         text_input = state.get(K.INPUT, "")
         image_text = state.get("_image_text", "")
         audio_text = state.get("_audio_text", "")
@@ -110,31 +109,29 @@ class MultiModalSubAgent(BaseSubAgent):
         if not has_image and not has_audio:
             return {"_multimodal_result": "", K.EVIDENCE_SCORE: state.get(K.EVIDENCE_SCORE, 0.5)}
 
-        fusion_context = f"""## 文本描述
-{text_input}
-"""
+        # Cross-Attention 融合: 以文本为主体 Query, 图像/音频为 Key/Value
+        fused_vector = _cross_attention_fuse(text_input, image_text, audio_text)
+
+        fusion_context = f"## 文本描述\n{text_input}"
         if has_image:
-            fusion_context += f"\n## 图像分析结果\n{image_text}"
+            fusion_context += f"\n\n## 图像分析结果\n{image_text}"
         if has_audio:
-            fusion_context += f"\n## 音频分析结果\n{audio_text}"
+            fusion_context += f"\n\n## 音频分析结果\n{audio_text}"
+        fusion_context += f"\n\n## 跨模态注意力权重\n{fused_vector}"
 
         try:
             fusion_prompt = (
                 "你是多模态诊断融合专家。请综合文本描述、图像分析和音频分析结果，"
-                "判断各个模态的证据是否相互印证或存在矛盾。\n"
-                "输出 JSON 格式：{\"consistency\": \"consistent/partial/contradiction\", "
-                "\"key_findings\": [\"发现1\", \"发现2\"], "
-                "\"contradictions\": [], "
-                "\"confidence_boost\": 0.1, "
-                "\"fused_analysis\": \"综合分析文本\"}"
+                "判断各个模态的证据是否相互印证或存在矛盾。"
+                "输出 JSON: {\"consistency\":\"consistent/partial/contradiction\","
+                "\"key_findings\":[\"发现1\"],\"contradictions\":[],"
+                "\"confidence_boost\":0.1,\"fused_analysis\":\"综合分析文本\"}"
             )
             fusion_result = llm.chat_json(fusion_prompt, fusion_context, temperature=0.1)
         except Exception as e:
             logger.warning(f"多模态融合失败: {e}")
             fusion_result = {
-                "consistency": "partial",
-                "key_findings": [],
-                "contradictions": [],
+                "consistency": "partial", "key_findings": [], "contradictions": [],
                 "confidence_boost": 0.0,
                 "fused_analysis": f"[多模态融合降级] {fusion_context[:500]}",
             }
@@ -157,3 +154,60 @@ class MultiModalSubAgent(BaseSubAgent):
             "_multimodal_consistency": fusion_result.get("consistency", "partial"),
             "_multimodal_findings": fusion_result.get("key_findings", []),
         }
+
+
+_cached_st_model = None
+
+
+def _cross_attention_fuse(text: str, image_text: str, audio_text: str) -> str:
+    global _cached_st_model
+    result_parts = []
+    try:
+        from app.config import settings
+        import os
+        if settings.hf_endpoint:
+            os.environ.setdefault("HF_ENDPOINT", settings.hf_endpoint)
+
+        if _cached_st_model is None:
+            from sentence_transformers import SentenceTransformer
+            _cached_st_model = SentenceTransformer(settings.embedding_model_name, device="cpu")
+
+        text_emb = _cached_st_model.encode([text])[0]
+
+        attention_scores = []
+
+        if image_text:
+            img_emb = _cached_st_model.encode([image_text])[0]
+            img_sim = float(text_emb @ img_emb.T)
+            attention_scores.append(("图像模态", img_sim))
+            result_parts.append(f"图像注意力权重: {img_sim:.4f}")
+
+        if audio_text:
+            aud_emb = _cached_st_model.encode([audio_text])[0]
+            aud_sim = float(text_emb @ aud_emb.T)
+            attention_scores.append(("音频模态", aud_sim))
+            result_parts.append(f"音频注意力权重: {aud_sim:.4f}")
+
+        attention_scores.sort(key=lambda x: x[1], reverse=True)
+        dominant = attention_scores[0][0] if attention_scores else "文本模态"
+        result_parts.append(f"主导模态: {dominant}")
+
+    except Exception as e:
+        logger.debug(f"Cross-Attention 降级关键词方案: {e}")
+        if image_text:
+            img_overlap = _keyword_overlap(text, image_text)
+            result_parts.append(f"图像关键词重叠度: {img_overlap:.4f}")
+        if audio_text:
+            aud_overlap = _keyword_overlap(text, audio_text)
+            result_parts.append(f"音频关键词重叠度: {aud_overlap:.4f}")
+
+    return "; ".join(result_parts)
+
+
+def _keyword_overlap(a: str, b: str) -> float:
+    import re
+    tokens_a = {ch for ch in a if "\u4e00" <= ch <= "\u9fff"}
+    tokens_b = {ch for ch in b if "\u4e00" <= ch <= "\u9fff"}
+    if not tokens_a:
+        return 0.0
+    return len(tokens_a & tokens_b) / len(tokens_a)

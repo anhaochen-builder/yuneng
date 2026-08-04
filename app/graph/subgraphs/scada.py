@@ -50,7 +50,7 @@ class SCADASubAgent(BaseSubAgent):
     # 内部节点
     # ================================================================
 
-    def _data_fetch_node(self, state: dict[str, Any]) -> dict[str, Any]:
+    async def _data_fetch_node(self, state: dict[str, Any]) -> dict[str, Any]:
         """数据采集：从 SCADA 协议适配器获取设备实时数据"""
         device_id = state.get(K.DEVICE_ID, "")
         entities = state.get(K.ENTITIES, {})
@@ -66,11 +66,12 @@ class SCADASubAgent(BaseSubAgent):
 
         try:
             from app.scada.protocol_factory import ProtocolFactory
-            from app.scada.base import ScadaDeviceConfig
+            from app.scada.base import DeviceConfig as ScadaDeviceConfig
 
             factory = ProtocolFactory()
             config = ScadaDeviceConfig(
                 device_id=device_id,
+                device_type=entities.get("device_type", "inverter"),
                 protocol=entities.get("protocol", "modbus"),
                 host=entities.get("host", "localhost"),
                 port=int(entities.get("port", 502)),
@@ -78,11 +79,29 @@ class SCADASubAgent(BaseSubAgent):
             )
 
             adapter = factory.create(config)
-            data = adapter.read_all()
-            scada_data["points"] = [p.to_dict() if hasattr(p, "to_dict") else str(p) for p in data]
+            await adapter.connect()
+            data = await adapter.read_all()
+            points = data.data_points if hasattr(data, "data_points") else data
+            point_dicts = [p.to_dict() if hasattr(p, "to_dict") else str(p) for p in points]
+
+            from app.scada.ring_buffer import get_ring_buffer
+            from app.scada.base import ScadaDataPoint
+            for p in points:
+                if hasattr(p, "device_id"):
+                    get_ring_buffer().push(p)
+                else:
+                    get_ring_buffer().push(ScadaDataPoint(
+                        device_id=device_id,
+                        point_name=str(p.get("name", p.get("point_name", ""))) if isinstance(p, dict) else "unknown",
+                        value=p.get("value", 0) if isinstance(p, dict) else 0,
+                        timestamp=p.get("timestamp", "") if isinstance(p, dict) else "",
+                        unit=p.get("unit", "") if isinstance(p, dict) else "",
+                    ))
+
+            scada_data["points"] = point_dicts
             scada_data["protocol"] = config.protocol
-            scada_data["count"] = len(data)
-            logger.info(f"SCADA 数据采集完成: {device_id}, {len(data)} 个测点")
+            scada_data["count"] = len(points)
+            logger.info(f"SCADA 数据采集完成: {device_id}, {len(points)} 个测点")
 
         except Exception as e:
             scada_data["error"] = str(e)

@@ -11,24 +11,14 @@ from fastapi.responses import StreamingResponse
 from app.models.schemas import DiagnosisRequest, DiagnosisResponse, DiagnosisResult, RootCause, ActionPlan, ActionStep, SafetyCheck, MultimodalRequest
 from app.graph.builder import get_graph
 from app.graph.state_keys import StateKeys as K
-from app.memory.memory_service import MemoryService
+from app.memory.memory_service import get_memory
 from app.skill.registry import skill_registry
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/diagnose", tags=["diagnosis"])
-memory = MemoryService()
+memory = get_memory()
 
-NODE_STATUS_MAP: dict[str, str] = {
-    "precheck": "正在校验输入...",
-    "context_load": "正在加载上下文记忆...",
-    "router": "正在识别意图...",
-    "knowledge_qa": "正在检索知识库...",
-    "diagnosis": "正在执行智能诊断...",
-    "chat": "正在生成回复...",
-    "safety_review": "正在进行安全审查...",
-    "final_response": "正在生成诊断报告...",
-    "memory_save": "正在保存会话记录...",
-}
+from app.graph.nodes.common_nodes import NODE_STATUS_MAP
 
 
 def _node_status_message(node_name: str) -> str:

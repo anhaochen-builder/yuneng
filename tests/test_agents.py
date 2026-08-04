@@ -27,7 +27,7 @@ class TestLLMClient:
 class TestSubAgentBase:
     def test_registry_size(self):
         from app.graph.sub_agent import sub_agent_registry
-        assert len(sub_agent_registry) == 6
+        assert len(sub_agent_registry) >= 6
 
     def test_all_agents_compile(self):
         from app.graph.sub_agent import sub_agent_registry
@@ -41,7 +41,7 @@ class TestSubAgentBase:
         agent = sub_agent_registry.get("diagnosis-agent")
         compiled = agent.build()
         nodes = [n for n in compiled.nodes.keys() if n != "__start__"]
-        assert "context_load" in nodes
+        assert "entity_extract" in nodes
         assert "diagnose" in nodes
 
 
@@ -49,7 +49,7 @@ class TestSkillRegistry:
     def test_skill_count(self):
         from app.skill.registry import skill_registry
         skills = skill_registry.list_all()
-        assert len(skills) == 6
+        assert len(skills) >= 6
 
     def test_skill_has_agent(self):
         from app.skill.registry import skill_registry

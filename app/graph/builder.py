@@ -80,7 +80,7 @@ def route_after_diagnosis(state: AgentState) -> str:
     loop_count = state.get(K.LOOP_COUNT, 0)
     max_retries = state.get("max_retries", settings.max_retries)
 
-    if confidence < 0.3 and loop_count <= max_retries:
+    if confidence < settings.confidence_threshold and loop_count <= max_retries:
         return "diagnosis"
     return "judge"
 

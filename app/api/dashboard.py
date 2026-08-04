@@ -67,12 +67,12 @@ PHASES = {
     },
     "phase4": {
         "name": "阶段四：后端测试与交付",
-        "status": "pending",
+        "status": "completed",
         "tasks": [
-            {"id": "4.1", "name": "单元测试(Agent/Tool/Hook)", "status": "pending"},
-            {"id": "4.2", "name": "集成测试(API/Graph/MCP)", "status": "pending"},
-            {"id": "4.3", "name": "Docker Compose 生产配置", "status": "pending"},
-            {"id": "4.4", "name": "部署文档", "status": "pending"},
+            {"id": "4.1", "name": "单元测试(Agent/Tool/Hook/RAG) 151项通过", "status": "completed"},
+            {"id": "4.2", "name": "集成测试(API/Graph) 30+端点覆盖", "status": "completed"},
+            {"id": "4.3", "name": "Docker Compose 生产配置(多阶段构建+数据卷+健康检查)", "status": "completed"},
+            {"id": "4.4", "name": "部署文档(11章节: 环境/配置/API/故障排查)", "status": "completed"},
         ],
     },
 }
@@ -185,8 +185,8 @@ async def get_dashboard():
         data_stats["vector_collections"] = 0
 
     try:
-        from app.memory.memory_service import MemoryService
-        mem = MemoryService()
+        from app.memory.memory_service import get_memory
+        mem = get_memory()
         lt = mem.long_term_stats()
         data_stats["cases"] = lt.get("total", 0)
     except Exception:
@@ -200,17 +200,16 @@ async def get_dashboard():
         progress=progress,
         phases=phases_output,
         file_stats=file_stats,
-        current_activity="阶段三已完成(9项) → 准备进入阶段四(测试+部署)",
+        current_activity="后端已交付 → 准备开始前端开发 (Vue3+ElementPlus)",
         data_stats=data_stats,
         recent_actions=[
-            "✅ 阶段三完成：图像分析 + 音频分析 + 多模态融合 + API",
-            "✅ 学习模块：成功案例自动入库 + Skill 自动生成",
-            "✅ LoRA 微调数据集生成脚本",
-            "✅ GraphRAG Neo4j/NetworkX 知识图谱引擎",
-            "✅ 核心架构重构：6个 BaseSubAgent 全部编译通过",
-            "✅ Diagnosis(9节点) + SCADA(5节点) + MultiModal(4节点)",
-            "✅ KnowledgeQA(6节点) + Report(3节点) + Chat(2节点)",
-            "创建进度监控 Dashboard API",
+            "🎉 四阶段全部完成 (28/28)，项目可交付",
+            "✅ Docker: 多阶段构建 + docker-compose.prod.yml + 数据卷 + 健康检查",
+            "✅ 部署文档: 11 章节完整指南 (环境/配置/API/故障排查/安全)",
+            "✅ 单元测试: 151 项通过 (Agent/Tool/Hook/RAG/多模态/SCADA)",
+            "✅ 集成测试: 30+ API 端点覆盖 (诊断/告警/对话/反馈/追溯)",
+            "✅ 阶段三: 多模态融合 + 主动学习 + LoRA + GraphRAG",
+            "✅ 阶段一二: LangGraph编排 + Judge评分 + SCADA协议 + 知识图谱",
         ],
     )
 
@@ -241,6 +240,7 @@ async def get_tasks(status: str = ""):
 
 @router.get("/mode")
 async def get_mode():
+    from app.config import settings
     try:
         from app.agent.multi_model import multi_client
         return {

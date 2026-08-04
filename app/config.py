@@ -24,6 +24,11 @@ class Settings:
     qwen_local_path: str = os.getenv("QWEN_LOCAL_PATH", "")
     offline_mode: str = os.getenv("OFFLINE_MODE", "auto")
 
+    # 嵌入与重排模型
+    hf_endpoint: str = os.getenv("HF_ENDPOINT", "https://hf-mirror.com")
+    embedding_model_name: str = os.getenv("EMBEDDING_MODEL", "maidalun1020/bce-embedding-base_v1")
+    rerank_model_name: str = os.getenv("RERANK_MODEL", "maidalun1020/bce-reranker-base_v1")
+
     # 向量数据库
     vector_db_path: str = os.getenv("VECTOR_DB_PATH", str(BASE_DIR / "knowledge_db"))
     knowledge_path: str = os.getenv("KNOWLEDGE_PATH", str(BASE_DIR / "data"))

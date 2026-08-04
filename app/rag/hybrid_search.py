@@ -1,13 +1,17 @@
-"""知识库引擎 — 纯文件存储 + BM25 关键词检索
+"""混合检索引擎 — 三重检索 + RRF 融合 + BGE Reranker 精排
 
-零依赖嵌入模型，离线可用，搜索速度快。
-数据存储在 knowledge_db/knowledge.json
+管道:
+  向量检索(BGE-Large-ZH, ChromaDB HNSW) ┐
+  BM25 关键词检索 (电力领域词典)       ├→ RRF 融合(Top-20) → BGE Reranker → Top-5
+  知识图谱上下文扩展                    ┘
+
+RRF 算法: score(d) = Σ weight_s / (k + rank_s(d)), k=60
+权重: 向量=1.0, BM25=1.0, 图谱=0.8
 """
 
 import json
 import logging
 import math
-import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -30,6 +34,13 @@ POWER_KEYWORDS = [
     "套管", "DGA", "绝缘电阻", "绝缘阻抗", "绕组", "铁芯",
     "组串", "光伏组件", "PID衰减", "MPPT", "汇流箱",
 ]
+
+# RRF 参数
+RRF_K: int = 60               # 平滑常数
+RRF_VECTOR_WEIGHT: float = 1.0
+RRF_BM25_WEIGHT: float = 1.0
+RRF_KG_WEIGHT: float = 0.8
+RRF_TOP_K: int = 20           # RRF 融合后保留候选数
 
 DEFAULT_KNOWLEDGE = [
     "逆变器IGBT模块过热常见原因：1.散热风扇故障或停转 2.散热器积尘堵塞 3.导热硅脂老化干涸 4.IGBT模块老化导通电阻增大 5.环境温度过高。标准处置：立即降负载至70%，检查散热风扇，清洁散热器，检测IGBT结温(>125°C报警)。更换前必须断电验电。",
@@ -60,6 +71,10 @@ DEFAULT_KNOWLEDGE = [
 ]
 
 
+# ================================================================
+# BM25 关键词检索引擎
+# ================================================================
+
 class KeywordIndex:
     def __init__(self):
         self._docs: list[str] = []
@@ -80,7 +95,7 @@ class KeywordIndex:
             for term in seen:
                 self._doc_freq[term] += 1
         self._built = True
-        logger.info(f"关键词索引已构建: {len(documents)} 篇文档, {len(self._doc_freq)} 个关键词")
+        logger.info(f"BM25 索引已构建: {len(documents)} 篇, {len(self._doc_freq)} 关键词")
 
     def search(self, query: str, top_k: int = 10) -> list[dict]:
         if not self._built:
@@ -113,14 +128,14 @@ class KeywordIndex:
         scores.sort(key=lambda x: x[1], reverse=True)
         return [
             {"id": f"kw_{idx}", "text": self._docs[idx][:2000],
-             "metadata": {"source": "keyword"}, "score": round(score, 4)}
+             "metadata": {"source": "bm25"}, "score": round(score, 4)}
             for idx, score in scores[:top_k]
         ]
 
     def _all_docs(self) -> list[dict]:
         return [
             {"id": f"kw_{i}", "text": doc[:2000],
-             "metadata": {"source": "keyword"}, "score": 0.5}
+             "metadata": {"source": "bm25"}, "score": 0.5}
             for i, doc in enumerate(self._docs)
         ]
 
@@ -143,7 +158,7 @@ class FastKnowledgeStore:
         KNOWLEDGE_FILE.parent.mkdir(parents=True, exist_ok=True)
         KNOWLEDGE_FILE.write_text(json.dumps(docs, ensure_ascii=False, indent=2), encoding="utf-8")
         self._index.build(docs)
-        logger.info(f"知识库已加载: {len(docs)} 条, 文件: {KNOWLEDGE_FILE}")
+        logger.info(f"知识库已加载: {len(docs)} 条")
 
     def search(self, query: str, top_k: int = 10) -> list[dict]:
         return self._index.search(query, top_k)
@@ -173,16 +188,137 @@ def get_knowledge_store() -> FastKnowledgeStore:
     return _knowledge_store
 
 
+# ================================================================
+# RRF 融合算法
+# ================================================================
+
+def rrf_fusion(
+    vector_results: list[dict],
+    bm25_results: list[dict],
+    kg_results: list[dict] = None,
+    top_k: int = RRF_TOP_K,
+) -> list[dict]:
+    """Reciprocal Rank Fusion — 多路检索结果融合
+
+    RRF(d) = Σ weight_s / (k + rank_s(d))
+    k=60 防止除零, 权重: 向量=1.0 BM25=1.0 图谱=0.8
+    """
+    doc_map: dict[str, dict] = {}
+    doc_scores: dict[str, float] = defaultdict(float)
+
+    # 向量检索结果
+    for rank, doc in enumerate(vector_results, start=1):
+        doc_id = doc.get("id", str(hash(doc.get("text", ""))))
+        rrf_score = RRF_VECTOR_WEIGHT / (RRF_K + rank)
+        doc_scores[doc_id] += rrf_score
+        if doc_id not in doc_map:
+            doc_map[doc_id] = dict(doc)
+
+    # BM25 检索结果
+    for rank, doc in enumerate(bm25_results, start=1):
+        doc_id = doc.get("id", str(hash(doc.get("text", ""))))
+        rrf_score = RRF_BM25_WEIGHT / (RRF_K + rank)
+        doc_scores[doc_id] += rrf_score
+        if doc_id not in doc_map:
+            doc_map[doc_id] = dict(doc)
+
+    # 知识图谱结果 (rank 从 100 起算，给较低权重)
+    if kg_results:
+        for rank, doc in enumerate(kg_results, start=100):
+            doc_id = doc.get("id", str(hash(doc.get("text", ""))))
+            rrf_score = RRF_KG_WEIGHT / (RRF_K + rank)
+            doc_scores[doc_id] += rrf_score
+            if doc_id not in doc_map:
+                doc_map[doc_id] = dict(doc)
+
+    # 按 RRF 分数排序
+    sorted_items = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)
+    fused = []
+    for doc_id, rrf_score in sorted_items[:top_k]:
+        doc = doc_map[doc_id]
+        doc["rrf_score"] = round(rrf_score, 6)
+        fused.append(doc)
+
+    return fused
+
+
+# ================================================================
+# 混合检索服务 — 完整管道
+# ================================================================
+
 class HybridSearchService:
+    """三重检索 + RRF 融合 + BGE Reranker 精排
+
+    用法:
+        svc = HybridSearchService()
+        results = svc.search("逆变器IGBT过热", top_k=5)
+    """
+
     def __init__(self):
         self._store = get_knowledge_store()
 
-    def search(self, query: str, top_k: int = 10, **kwargs) -> list[dict]:
-        return self._store.search(query, top_k)
+    def search(self, query: str, top_k: int = 10, use_rerank: bool = True) -> list[dict]:
+        """执行完整混合检索管道"""
+        if not query:
+            return []
+
+        # 第1重: 向量检索 (BGE-Large-ZH + ChromaDB HNSW)
+        vector_results = self._vector_search(query)
+
+        # 第2重: BM25 关键词检索
+        bm25_results = self._store.search(query, top_k=20)
+
+        # 第3重: 知识图谱上下文
+        kg_results = self._kg_search(query)
+
+        # RRF 融合
+        fused = rrf_fusion(vector_results, bm25_results, kg_results)
+
+        if not fused:
+            # 降级: 任何一路有结果就返回
+            fused = vector_results or bm25_results or []
+
+        # BGE Reranker 精排
+        if use_rerank and len(fused) > top_k:
+            from app.rag.rerank import BGECrossEncoderReranker
+            reranker = BGECrossEncoderReranker()
+            fused = reranker.rerank(query, fused, top_k=top_k)
+
+        return fused[:top_k]
+
+    def _vector_search(self, query: str) -> list[dict]:
+        try:
+            from app.rag.vector_store import search_vector as chroma_search
+            return chroma_search(query, top_k=20)
+        except Exception as e:
+            logger.debug(f"向量检索未启用: {e}")
+            return []
+
+    def _kg_search(self, query: str) -> list[dict]:
+        try:
+            from app.rag.knowledge_graph import KnowledgeGraphService
+            kg = KnowledgeGraphService()
+            ctx = kg.build_graph_context(query)
+            if ctx:
+                return [{"id": "kg_ctx", "text": ctx, "metadata": {"source": "knowledge_graph"}, "score": 0.6}]
+        except Exception:
+            pass
+        try:
+            from app.rag.graphrag import graphrag_service
+            ctx = graphrag_service.build_graph_context(query)
+            if ctx:
+                return [{"id": "graphrag_ctx", "text": ctx, "metadata": {"source": "graphrag"}, "score": 0.6}]
+        except Exception:
+            pass
+        return []
 
     def index_keywords(self, documents: list[str]):
         self._store.add(documents)
 
+
+# ================================================================
+# 向后兼容接口
+# ================================================================
 
 def search_vector(query: str, collection_name: str = "", top_k: int = 10) -> list[dict]:
     return get_knowledge_store().search(query, top_k)

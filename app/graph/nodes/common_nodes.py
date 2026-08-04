@@ -9,6 +9,21 @@ from app.agent.router_agent import RouterAgent
 from app.agent.llm_client import llm
 from app.rag.hybrid_search import HybridSearchService
 
+NODE_STATUS_MAP: dict[str, str] = {
+    "precheck": "正在校验输入...",
+    "context_load": "正在加载上下文记忆...",
+    "router": "正在识别意图...",
+    "knowledge_qa": "正在检索知识库...",
+    "diagnosis": "正在执行智能诊断...",
+    "diagnosis_parallel": "正在并行采集数据...",
+    "judge": "正在进行质量评审...",
+    "report": "正在生成报告...",
+    "chat": "正在生成回复...",
+    "safety_review": "正在进行安全审查...",
+    "final_response": "正在生成诊断报告...",
+    "memory_save": "正在保存会话记录...",
+}
+
 logger = logging.getLogger(__name__)
 hook_engine = create_hook_engine()
 router_agent = RouterAgent()
@@ -25,15 +40,26 @@ def precheck_node(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def context_load_node(state: dict[str, Any]) -> dict[str, Any]:
-    """ContextLoad: 加载 Memory + Skill + 历史"""
-    memory_context = state.get(K.MEMORY_CONTEXT, "")
-    skill_context = state.get(K.SKILL_CONTEXT, "")
-    history = state.get(K.HISTORY, "")
-    return {
-        K.MEMORY_CONTEXT: memory_context,
-        K.SKILL_CONTEXT: skill_context,
-        K.HISTORY: history,
-    }
+    session_id = state.get(K.SESSION_ID, "")
+    task_id = state.get(K.TASK_ID, "")
+    try:
+        from app.memory.memory_service import get_memory
+        mem = get_memory()
+        mem.init_session(session_id)
+        history = mem.get_session_history(session_id, n=3)
+        task_ctx = mem.get_task_context(task_id) if task_id else {}
+        return {
+            K.HISTORY: history,
+            K.MEMORY_CONTEXT: history,
+            K.SKILL_CONTEXT: task_ctx.get("skill_context", state.get(K.SKILL_CONTEXT, "")),
+        }
+    except Exception as e:
+        logger.warning(f"上下文加载失败: {e}")
+        return {
+            K.MEMORY_CONTEXT: state.get(K.MEMORY_CONTEXT, ""),
+            K.SKILL_CONTEXT: state.get(K.SKILL_CONTEXT, ""),
+            K.HISTORY: state.get(K.HISTORY, ""),
+        }
 
 
 def router_node(state: dict[str, Any]) -> dict[str, Any]:
@@ -70,6 +96,14 @@ def final_response_node(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def memory_save_node(state: dict[str, Any]) -> dict[str, Any]:
-    """MemorySave: 保存对话记忆"""
-    logger.info(f"保存对话记忆: session={state.get(K.SESSION_ID, '')}")
+    session_id = state.get(K.SESSION_ID, "")
+    user_input = state.get(K.INPUT, "")
+    response = state.get(K.FINAL_RESPONSE, state.get(K.EXECUTION_RESULT, ""))
+    try:
+        from app.memory.memory_service import get_memory
+        mem = get_memory()
+        mem.save_to_session(session_id, user_input, response)
+        logger.info(f"保存对话记忆: session={session_id}")
+    except Exception as e:
+        logger.warning(f"记忆保存失败: {e}")
     return {}
