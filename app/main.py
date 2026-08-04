@@ -81,7 +81,6 @@ class UnifiedResponseMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(
                     status_code=response.status_code,
                     content={"code": 0, "data": None, "message": "success"},
-                    headers=dict(response.headers),
                 )
 
             try:
@@ -92,18 +91,15 @@ class UnifiedResponseMiddleware(BaseHTTPMiddleware):
                     return JSONResponse(
                         status_code=response.status_code,
                         content=data,
-                        headers=dict(response.headers),
                     )
                 return JSONResponse(
                     status_code=response.status_code,
                     content={"code": 0, "data": data, "message": "success"},
-                    headers=dict(response.headers),
                 )
             except Exception:
                 return JSONResponse(
                     status_code=response.status_code,
                     content={"code": 0, "data": body.decode("utf-8", errors="replace"), "message": "success"},
-                    headers=dict(response.headers),
                 )
 
         return response
