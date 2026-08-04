@@ -3,6 +3,7 @@
 import logging
 import sys
 import traceback
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -24,10 +25,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from app.graph.sub_agent_init import register_all
+    from app.graph.sub_agent import sub_agent_registry
+    from app.skill.registry import skill_registry
+    register_all()
+    logger.info(f"所有子智能体已注册: {len(sub_agent_registry._agents)} 个 SubAgent, {len(skill_registry._skills)} 个 Skill")
+    yield
+
+
 app = FastAPI(
     title="驭能 - 新能源场站非计划停机智能诊断系统",
     description="基于 DeepSeek V4 Pro + Hermes + OpenCode 的智能诊断平台",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -153,16 +166,6 @@ app.include_router(trace.router)
 app.include_router(scada.router)
 app.include_router(dashboard.router)
 app.include_router(audit.router)
-
-
-@app.on_event("startup")
-async def startup_event():
-    """启动时注册所有子智能体"""
-    from app.graph.sub_agent_init import register_all
-    from app.graph.sub_agent import sub_agent_registry
-    from app.skill.registry import skill_registry
-    register_all()
-    logger.info(f"所有子智能体已注册: {len(sub_agent_registry._agents)} 个 SubAgent, {len(skill_registry._skills)} 个 Skill")
 
 
 @app.get("/health")

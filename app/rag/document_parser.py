@@ -184,50 +184,113 @@ class DocumentParser:
 
     @staticmethod
     def _parse_pdf_ocr(filepath: str) -> list[dict[str, Any]]:
-        """OCR 扫描件 PDF 解析（PaddleOCR 可选）"""
-        try:
-            from paddleocr import PaddleOCR
-            ocr = PaddleOCR(use_angle_cls=True, lang="ch", show_log=False)
+        """OCR 扫描件 PDF 解析
 
+        支持三引擎自动降级:
+          1. PaddleOCR (百度,中文 >95%, 需 GPU 加速) — pip install paddlepaddle paddleocr
+          2. EasyOCR (开源,中文 >90%, CPU) — pip install easyocr
+          3. pytesseract (Google,中文 >80%, 需装 tesseract-ocr-chi-sim) — apt install tesseract-ocr tesseract-ocr-chi-sim && pip install pytesseract Pillow
+
+        任一引擎可用即启用 OCR，均不可用时返回空列表(无报错)。
+        """
+        ocr = DocumentParser._load_ocr_engine()
+        if ocr is None:
+            return []
+
+        try:
             import fitz
             doc = fitz.open(filepath)
             chunks: list[dict[str, Any]] = []
 
             for page_num, page in enumerate(doc):
                 pix = page.get_pixmap(dpi=200)
-                img_path = f"/tmp/paddleocr_page_{page_num}.png"
+                img_path = f"/tmp/yuneng_ocr_page_{page_num}.png"
                 pix.save(img_path)
 
-                result = ocr.ocr(img_path, cls=True)
-                if result and result[0]:
-                    text_lines = [
-                        line[1][0]
-                        for line in result[0]
-                        if line[1][1] > 0.5
-                    ]
-                    combined = "\n".join(text_lines).strip()
-                    if combined:
-                        chunks.append({
-                            "text": combined,
-                            "source": filepath,
-                            "page": page_num + 1,
-                            "type": "pdf_ocr",
-                            "ocr_confidence": round(
-                                sum(l[1][1] for l in result[0]) / max(len(result[0]), 1), 2
-                            ),
-                        })
+                text = DocumentParser._run_ocr(ocr, img_path)
+                if text and text.strip():
+                    chunks.append({
+                        "text": text.strip(),
+                        "source": filepath,
+                        "page": page_num + 1,
+                        "type": "pdf_ocr",
+                    })
 
                 Path(img_path).unlink(missing_ok=True)
 
             doc.close()
+            logger.info(f"OCR 解析完成: {filepath} → {len(chunks)} 页")
             return chunks
 
         except ImportError:
-            logger.info(
-                "PaddleOCR 未安装（可选依赖），跳过 OCR 扫描件识别。"
-                "安装: pip install paddleocr"
-            )
+            logger.info("PyMuPDF 未安装，跳过 OCR")
             return []
+        except Exception as e:
+            logger.warning(f"OCR 解析异常({filepath}): {e}")
+            return []
+
+    @staticmethod
+    def _load_ocr_engine():
+        """按优先级加载 OCR 引擎"""
+        # 1. PaddleOCR
+        try:
+            from paddleocr import PaddleOCR
+            ocr = PaddleOCR(use_angle_cls=True, lang="ch", show_log=False)
+            logger.info("OCR 引擎: PaddleOCR")
+            return ("paddleocr", ocr)
+        except ImportError:
+            pass
+
+        # 2. EasyOCR
+        try:
+            import easyocr
+            reader = easyocr.Reader(["ch_sim", "en"], gpu=False)
+            logger.info("OCR 引擎: EasyOCR")
+            return ("easyocr", reader)
+        except ImportError:
+            pass
+
+        # 3. pytesseract
+        try:
+            import pytesseract
+            from PIL import Image
+            logger.info("OCR 引擎: pytesseract")
+            return ("tesseract", pytesseract)
+        except ImportError:
+            pass
+
+        logger.info(
+            "OCR 引擎未安装（可选），跳过扫描件识别。"
+            "安装其一: pip install paddleocr / pip install easyocr / "
+            "apt install tesseract-ocr-chi-sim && pip install pytesseract"
+        )
+        return None
+
+    @staticmethod
+    def _run_ocr(engine, img_path: str) -> str:
+        """统一 OCR 调用接口"""
+        engine_type, ocr = engine
+
+        if engine_type == "paddleocr":
+            result = ocr.ocr(img_path, cls=True)
+            if result and result[0]:
+                return "\n".join(
+                    line[1][0] for line in result[0] if line[1][1] > 0.5
+                )
+            return ""
+
+        elif engine_type == "easyocr":
+            result = ocr.readtext(img_path)
+            return "\n".join(
+                text for _, text, conf in result if conf > 0.5
+            )
+
+        elif engine_type == "tesseract":
+            from PIL import Image
+            img = Image.open(img_path)
+            return ocr.image_to_string(img, lang="chi_sim+eng")
+
+        return ""
 
     @staticmethod
     def _parse_pdf_fallback(filepath: str) -> list[dict[str, Any]]:
