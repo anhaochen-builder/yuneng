@@ -16,6 +16,14 @@ const feedbackResult = ref('')
 const showTopology = ref(false)
 const showMemory = ref(false)
 
+// 多模态文件
+const uploadedImages = ref<Array<{ file: File; preview: string; type: string }>>([])
+const uploadedAudio = ref<Array<{ file: File; name: string }>>([])
+const showUploadPanel = ref(false)
+const isDragging = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const audioInput = ref<HTMLInputElement | null>(null)
+
 // 模拟拓扑步骤
 const topoSteps = ref<Array<{ node: string; status: 'done' | 'running' | 'pending' | 'error' | 'retry' }>>([
   { node: 'START', status: 'done' },
@@ -47,20 +55,40 @@ function scrollBottom() { nextTick(() => messagesEnd.value?.scrollIntoView({ beh
 
 async function send() {
   const text = inputText.value.trim()
-  if (!text || isStreaming.value) return
-  chatMessages.value.push({ role: 'user', content: text, timestamp: new Date().toLocaleTimeString() })
+  const hasMultimodal = hasFiles()
+  if ((!text && !hasMultimodal) || isStreaming.value) return
+
+  let displayText = text || '多模态故障诊断'
+  if (hasMultimodal) {
+    const parts: string[] = [text || '请根据以下多模态数据诊断故障']
+    if (uploadedImages.value.length) parts.push(`📷 已上传${uploadedImages.value.length}张图片(${uploadedImages.value.map(i=>i.type).join('/')})`)
+    if (uploadedAudio.value.length) parts.push(`🎵 已上传${uploadedAudio.value.length}个音频文件`)
+    displayText = parts.join('\n')
+  }
+
+  chatMessages.value.push({ role: 'user', content: displayText, timestamp: new Date().toLocaleTimeString() })
   inputText.value = ''
   feedbackGiven.value = false
   showTopology.value = true
   await scrollBottom()
 
-  // 模拟拓扑步骤推进
   simulateTopoSteps()
 
   const apiBase = import.meta.env.VITE_API_BASE_URL || ''
-  await sendMessage(`${apiBase}/api/diagnose/stream`, { symptoms: text })
+  if (hasMultimodal) {
+    await sendMessage(`${apiBase}/api/diagnose/multimodal/stream`, { symptoms: text || '多模态故障诊断' })
+  } else {
+    await sendMessage(`${apiBase}/api/diagnose/stream`, { symptoms: text })
+  }
   const content = streamedContent.value || '诊断完成，报告已生成'
   chatMessages.value.push({ role: 'assistant', content, timestamp: new Date().toLocaleTimeString() })
+
+  // 清理上传文件
+  uploadedImages.value.forEach(i => URL.revokeObjectURL(i.preview))
+  uploadedImages.value = []
+  uploadedAudio.value = []
+  showUploadPanel.value = false
+
   await scrollBottom()
 }
 
@@ -83,6 +111,44 @@ function simulateTopoSteps() {
 }
 
 function useQuick(text: string) { inputText.value = text; send() }
+
+// ── 多模态文件处理 ──
+function handleImageDrop(e: DragEvent) {
+  isDragging.value = false
+  addImageFiles(e.dataTransfer?.files)
+}
+function handleImageSelect() { addImageFiles(fileInput.value?.files) }
+
+function addImageFiles(fileList: FileList | null | undefined) {
+  if (!fileList) return
+  for (let i = 0; i < fileList.length; i++) {
+    const f = fileList[i]
+    if (!f || !f.type.startsWith('image/')) continue
+    const preview = URL.createObjectURL(f)
+    const imgType = f.name.toLowerCase().includes('红外') || f.name.toLowerCase().includes('thermal') ? '红外热像' : '可见光'
+    uploadedImages.value.push({ file: f, preview, type: imgType })
+  }
+}
+
+function removeImage(idx: number) {
+  const img = uploadedImages.value[idx]
+  if (img) URL.revokeObjectURL(img.preview)
+  uploadedImages.value.splice(idx, 1)
+}
+
+function handleAudioSelect() {
+  const files = audioInput.value?.files
+  if (!files) return
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i]
+    if (!f || (!f.type.startsWith('audio/') && !f.name.endsWith('.wav') && !f.name.endsWith('.mp3') && !f.name.endsWith('.flac'))) continue
+    uploadedAudio.value.push({ file: f, name: f.name })
+  }
+}
+
+function removeAudio(idx: number) { uploadedAudio.value.splice(idx, 1) }
+
+function hasFiles() { return uploadedImages.value.length > 0 || uploadedAudio.value.length > 0 }
 
 async function submitFeedback(rating: string) {
   if (!diagnosisReport.value) return
@@ -110,6 +176,9 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
       <div class="chat-header">
         <h4>🔧 智能诊断对话</h4>
         <div class="chat-header-actions">
+          <el-button size="small" text @click="showUploadPanel = !showUploadPanel" :type="showUploadPanel ? 'primary' : 'default'">
+            <el-icon><component is="Upload" /></el-icon> 多模态
+          </el-button>
           <el-button size="small" text @click="showTopology = !showTopology" :type="showTopology ? 'primary' : 'default'">
             <el-icon><component is="Share" /></el-icon> 拓扑
           </el-button>
@@ -119,6 +188,47 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
           <el-button size="small" text @click="clearChat">
             <el-icon><component is="Delete" /></el-icon> 清空
           </el-button>
+        </div>
+      </div>
+
+      <!-- 多模态导入面板 -->
+      <div v-if="showUploadPanel" class="upload-panel animate-slide-up">
+        <div class="upload-section">
+          <div class="upload-label">📷 设备图像</div>
+          <div
+            class="upload-zone" :class="{ dragging: isDragging }"
+            @dragover.prevent="isDragging = true"
+            @dragleave="isDragging = false"
+            @drop.prevent="handleImageDrop"
+            @click="fileInput?.click()"
+          >
+            <input type="file" accept="image/*" multiple ref="fileInput" @change="handleImageSelect" style="display:none" />
+            <el-icon :size="24" color="rgba(0,240,255,0.3)"><component is="PictureFilled" /></el-icon>
+            <span>红外热像 / 设备照片</span>
+          </div>
+          <div v-if="uploadedImages.length" class="preview-row">
+            <div v-for="(img, i) in uploadedImages" :key="i" class="preview-item">
+              <img :src="img.preview" />
+              <span class="preview-tag">{{ img.type }}</span>
+              <el-button size="small" circle text type="danger" @click.stop="removeImage(i)">✕</el-button>
+            </div>
+          </div>
+        </div>
+
+        <div class="upload-section">
+          <div class="upload-label">🎵 设备声音</div>
+          <div class="upload-zone" @click="audioInput?.click()">
+            <input type="file" accept="audio/*,.wav,.mp3,.flac" ref="audioInput" @change="handleAudioSelect" style="display:none" />
+            <el-icon :size="24" color="rgba(0,240,255,0.3)"><component is="Headset" /></el-icon>
+            <span>异常声音 / 振动录音</span>
+          </div>
+          <div v-if="uploadedAudio.length" class="audio-list">
+            <div v-for="(a, i) in uploadedAudio" :key="i" class="audio-item">
+              <el-icon color="var(--color-accent)"><component is="VideoPlay" /></el-icon>
+              <span>{{ a.name }}</span>
+              <el-button size="small" circle text type="danger" @click.stop="removeAudio(i)">✕</el-button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -370,4 +480,30 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
 .feedback { .fb-btns { display: flex; gap: 6px; flex-wrap: wrap; } }
 .feedback-result { font-size: 13px; color: #52c41a; padding: 8px 0; }
 .error-card { border-color: rgba(255,77,79,0.3); p { font-size: 13px; color: var(--color-text-secondary); } }
+
+// ── 多模态上传面板 ──
+.upload-panel {
+  display: flex; gap: 12px; padding: 10px 12px;
+  border-bottom: 1px solid rgba(0,240,255,0.06);
+  background: rgba(0,240,255,0.02);
+}
+.upload-section { flex: 1; }
+.upload-label { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 6px; font-weight: 600; }
+.upload-zone {
+  border: 1.5px dashed rgba(0,240,255,0.15); border-radius: 6px;
+  padding: 14px; text-align: center; cursor: pointer; transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  color: var(--color-text-secondary); font-size: 12px;
+  &:hover, &.dragging { border-color: var(--color-accent); background: rgba(0,240,255,0.03); }
+}
+.preview-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.preview-item {
+  position: relative; width: 56px; height: 56px; border-radius: 4px; overflow: hidden;
+  border: 1px solid rgba(0,240,255,0.2);
+  img { width: 100%; height: 100%; object-fit: cover; }
+  .preview-tag { position: absolute; bottom: 0; left: 0; right: 0; font-size: 9px; text-align: center; background: rgba(0,0,0,0.6); color: #fff; padding: 1px; }
+  .el-button { position: absolute; top: 0; right: 0; }
+}
+.audio-list { margin-top: 6px; }
+.audio-item { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(0,240,255,0.03); border-radius: 4px; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; }
 </style>
