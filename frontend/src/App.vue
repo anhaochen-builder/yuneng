@@ -27,11 +27,6 @@ const navItems = [
   { path: '/settings',  icon: 'Setting',   label: '系统设置' },
 ]
 
-const secondaryNav = [
-  { path: '/feedback', icon: 'DataLine', label: '反馈学习' },
-  { path: '/skills',   icon: 'MagicStick', label: '技能' },
-]
-
 function go(path: string) { router.push(path) }
 function isActive(path: string) {
   if (path === '/') return route.path === '/'
@@ -91,15 +86,6 @@ function isActive(path: string) {
           @click="go(item.path)"
         >
           <el-icon :size="18"><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
-        </div>
-        <div class="nav-separator"></div>
-        <div
-          v-for="item in secondaryNav" :key="item.path"
-          class="nav-item nav-item-secondary" :class="{ active: isActive(item.path) }"
-          @click="go(item.path)"
-        >
-          <el-icon :size="16"><component :is="item.icon" /></el-icon>
           <span>{{ item.label }}</span>
         </div>
       </div>

@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { dashboardApi, auditApi, healthCheck } from '@/api'
+import { dashboardApi, auditApi, healthCheck, feedbackApi, skillsApi } from '@/api'
 
 const mode = ref('production-online')
 const audit = ref<any>({})
 const health = ref<any>({})
 const loading = ref(true)
 const env = ref<any>({})
+const feedbackStats = ref({ total_accurate: 0, total_partial: 0, total_inaccurate: 0 })
+const skillsList = ref<any[]>([])
+const agentsList = ref<any[]>([])
 
 onMounted(async () => {
   try { const r = await dashboardApi.mode(); mode.value = (r.data || r).current || 'production-online' } catch {}
   try { const r = await auditApi.overview(); audit.value = r.data || r } catch {}
   try { const r = await healthCheck(); health.value = r.data || r; env.value = (r.data || r).env || {} } catch {}
+  try { const r = await feedbackApi.stats(); Object.assign(feedbackStats.value, r.data || r) } catch {}
+  try { const r = await skillsApi.list(); const d = r.data || r; skillsList.value = d.skills || []; agentsList.value = d.sub_agents || [] } catch {}
   loading.value = false
 })
 
@@ -95,7 +100,38 @@ const resources = [
             <div class="sd">
               <span class="s-dot" :style="{background: getServiceColor(s.status)}"></span>
               {{ s.name }}
-            </div>
+    <!-- 反馈学习 + 技能管理 -->
+    <div class="grid-2col">
+      <div class="tech-card">
+        <h4>📚 反馈与学习</h4>
+        <div class="feedback-stats">
+          <div class="fb-item accurate"><span class="fb-num font-digital">{{ feedbackStats.total_accurate || 0 }}</span><span class="fb-lbl">准确</span></div>
+          <div class="fb-item partial"><span class="fb-num font-digital">{{ feedbackStats.total_partial || 0 }}</span><span class="fb-lbl">部分准确</span></div>
+          <div class="fb-item inaccurate"><span class="fb-num font-digital">{{ feedbackStats.total_inaccurate || 0 }}</span><span class="fb-lbl">不准确</span></div>
+        </div>
+        <div class="learn-items">
+          <div class="li-row"><span>成功案例入库</span><el-progress :percentage="Math.min(((feedbackStats.total_accurate||0)/50)*100,100)" :stroke-width="6" color="#52c41a" style="flex:1;margin:0 10px" /><span class="font-digital">{{ feedbackStats.total_accurate || 0 }}/50</span></div>
+          <div class="li-row"><span>Skill 自动生成</span><el-progress :percentage="Math.min(((feedbackStats.total_accurate||0)/3)*100,100)" :stroke-width="6" color="#00f0ff" style="flex:1;margin:0 10px" /><span class="font-digital">≥3例触发</span></div>
+          <div class="li-row"><span>LoRA 微调</span><el-progress :percentage="Math.min(((feedbackStats.total_accurate||0)/50)*100,100)" :stroke-width="6" color="#7b68ee" style="flex:1;margin:0 10px" /><span class="font-digital">≥50例触发</span></div>
+        </div>
+      </div>
+
+      <div class="tech-card">
+        <h4>🧠 技能与子智能体</h4>
+        <div class="skill-summary">
+          <div class="ss-item"><span class="ss-num font-digital" style="color:var(--color-accent)">{{ skillsList.length }}</span><span class="ss-lbl">Skills</span></div>
+          <div class="ss-item"><span class="ss-num font-digital" style="color:#00d4aa">{{ agentsList.length }}</span><span class="ss-lbl">SubAgents</span></div>
+          <div class="ss-item"><span class="ss-num font-digital" style="color:#52c41a">✓</span><span class="ss-lbl">全部映射</span></div>
+        </div>
+        <div class="agent-mini-list">
+          <div v-for="a in agentsList.slice(0, 8)" :key="a.agent_id || a.name" class="am-item">
+            <span class="am-name">{{ a.name }}</span>
+            <el-tag size="small" type="success">active</el-tag>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
             <div class="st" :style="{color: getServiceColor(s.status)}">{{ s.detail }}</div>
           </div>
         </div>
@@ -189,4 +225,22 @@ h4 { color: var(--color-accent); margin-bottom: 12px; font-size: 14px; }
 .mc-icon { font-size: 32px; margin-bottom: 8px; }
 .mc-title { font-size: 15px; color: var(--color-text-primary); font-weight: 600; margin-bottom: 6px; }
 .mc-desc { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+
+.grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.feedback-stats { display: flex; gap: 12px; margin-bottom: 14px; }
+.fb-item { flex: 1; text-align: center; padding: 10px; border-radius: 6px; }
+.fb-item.accurate { background: rgba(82,196,26,0.08); border: 1px solid rgba(82,196,26,0.2); }
+.fb-item.partial { background: rgba(255,156,64,0.08); border: 1px solid rgba(255,156,64,0.2); }
+.fb-item.inaccurate { background: rgba(255,77,79,0.08); border: 1px solid rgba(255,77,79,0.2); }
+.fb-num { display: block; font-size: 22px; font-weight: 700; .accurate & { color: #52c41a; } .partial & { color: #ff9c40; } .inaccurate & { color: #ff4d4f; } }
+.fb-lbl { font-size: 11px; color: var(--color-text-secondary); }
+.learn-items { display: flex; flex-direction: column; gap: 8px; }
+.li-row { display: flex; align-items: center; font-size: 12px; color: var(--color-text-secondary); }
+.skill-summary { display: flex; gap: 16px; margin-bottom: 12px; }
+.ss-item { text-align: center; }
+.ss-num { display: block; font-size: 22px; font-weight: 700; }
+.ss-lbl { font-size: 11px; color: var(--color-text-secondary); }
+.agent-mini-list { display: flex; flex-direction: column; gap: 6px; }
+.am-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: rgba(0,240,255,0.03); border-radius: 4px; }
+.am-name { font-size: 13px; color: var(--color-text-primary); }
 </style>

@@ -8,8 +8,6 @@ const routes = [
   { path: '/trace/:taskId', name: 'DiagnosticTrace', component: () => import('@/views/DiagnosticTrace.vue'), meta: { title: '诊断过程透视' } },
   { path: '/knowledge', name: 'KnowledgeBase', component: () => import('@/views/KnowledgeBase.vue'), meta: { title: '知识库管理' } },
   { path: '/devices', name: 'DeviceStatus', component: () => import('@/views/DeviceStatus.vue'), meta: { title: '设备状态查询' } },
-  { path: '/feedback', name: 'FeedbackCenter', component: () => import('@/views/FeedbackCenter.vue'), meta: { title: '反馈与学习' } },
-  { path: '/skills', name: 'SkillManagement', component: () => import('@/views/SkillManagement.vue'), meta: { title: '技能管理' } },
   { path: '/settings', name: 'SystemSettings', component: () => import('@/views/SystemSettings.vue'), meta: { title: '系统设置' } },
 ]
 
