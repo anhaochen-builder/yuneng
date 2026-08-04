@@ -3,11 +3,10 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  background: var(--color-bg-primary);
+  background: transparent;
   color: var(--color-text-primary);
   font-family: var(--font-body);
   overflow: hidden;
-  background-image: radial-gradient(circle at center, #0a1f44 0%, #020b1a 100%);
 }
 
 .panel {
