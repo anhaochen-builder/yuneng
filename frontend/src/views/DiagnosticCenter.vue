@@ -361,7 +361,7 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
 
 // ── 聊天面板 ──
 .chat-panel {
-  flex: 1.4; display: flex; flex-direction: column; overflow: hidden;
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
   
   .chat-header {
     display: flex; justify-content: space-between; align-items: center;
@@ -465,52 +465,52 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
 .error-card { border-color: rgba(255,77,79,0.3); p { font-size: 13px; color: var(--color-text-secondary); } }
 
 // ── 右侧报告面板 ──
-.report-panel { width: 420px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
-.report-card { h4 { color: var(--color-accent); margin: 0; font-size: 15px; } }
-.report-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.report-badges { display: flex; align-items: center; gap: 10px; }
-.report-confidence { font-size: 18px; font-weight: 700; }
+.report-panel { width: 500px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.report-card { h4 { color: var(--color-accent); margin: 0; font-size: 17px; } }
+.report-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.report-badges { display: flex; align-items: center; gap: 12px; }
+.report-confidence { font-size: 22px; font-weight: 700; }
 
-.report-section { margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid rgba(0,240,255,0.06);
+.report-section { margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid rgba(0,240,255,0.06);
   &:last-child { border-bottom: none; margin-bottom: 0; }
 }
-.rs-title { font-size: 13px; color: var(--color-accent); margin-bottom: 8px; font-weight: 600; }
-.rs-body { font-size: 13px; color: var(--color-text-secondary); line-height: 1.8; }
+.rs-title { font-size: 15px; color: var(--color-accent); margin-bottom: 10px; font-weight: 600; }
+.rs-body { font-size: 15px; color: var(--color-text-secondary); line-height: 1.9; }
 
-.cause-card { padding: 10px 12px; background: rgba(0,240,255,0.03); border-radius: 6px; margin-bottom: 8px; border: 1px solid rgba(0,240,255,0.06); }
-.cause-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.cause-rank { font-weight: 700; color: var(--color-accent); }
-.cause-title { flex: 1; font-size: 13px; font-weight: 600; color: var(--color-text-primary); }
-.cause-prob { font-size: 14px; font-weight: 700; }
-.cause-evidence { display: flex; flex-wrap: wrap; gap: 4px; }
-.evidence-tag { font-size: 10px; padding: 2px 8px; background: rgba(0,240,255,0.08); border-radius: 3px; color: var(--color-text-secondary); }
+.cause-card { padding: 12px 14px; background: rgba(0,240,255,0.03); border-radius: 8px; margin-bottom: 10px; border: 1px solid rgba(0,240,255,0.06); }
+.cause-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.cause-rank { font-weight: 700; color: var(--color-accent); font-size: 15px; }
+.cause-title { flex: 1; font-size: 15px; font-weight: 600; color: var(--color-text-primary); }
+.cause-prob { font-size: 16px; font-weight: 700; }
+.cause-evidence { display: flex; flex-wrap: wrap; gap: 6px; }
+.evidence-tag { font-size: 12px; padding: 3px 10px; background: rgba(0,240,255,0.08); border-radius: 4px; color: var(--color-text-secondary); }
 
-.rec-item { display: flex; gap: 6px; padding: 5px 0; font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; }
-.rec-num { color: var(--color-accent); font-weight: 600; min-width: 20px; }
+.rec-item { display: flex; gap: 8px; padding: 6px 0; font-size: 15px; color: var(--color-text-secondary); line-height: 1.7; }
+.rec-num { color: var(--color-accent); font-weight: 600; min-width: 24px; }
 
-.step-card { padding: 10px 12px; background: rgba(82,196,26,0.05); border-radius: 6px; margin-bottom: 8px; border: 1px solid rgba(82,196,26,0.12); }
-.step-header { display: flex; gap: 8px; margin-bottom: 4px; }
-.step-order { color: #52c41a; font-weight: 600; font-size: 12px; }
-.step-action { font-size: 13px; color: var(--color-text-primary); font-weight: 600; }
-.step-detail { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
-.step-safety { font-size: 11px; color: #ff9c40; margin-top: 4px; }
-.tools-row { margin-top: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.tools-label { font-size: 12px; color: var(--color-text-secondary); }
+.step-card { padding: 12px 14px; background: rgba(82,196,26,0.05); border-radius: 8px; margin-bottom: 10px; border: 1px solid rgba(82,196,26,0.12); }
+.step-header { display: flex; gap: 10px; margin-bottom: 6px; }
+.step-order { color: #52c41a; font-weight: 600; font-size: 14px; }
+.step-action { font-size: 15px; color: var(--color-text-primary); font-weight: 600; }
+.step-detail { font-size: 14px; color: var(--color-text-secondary); line-height: 1.7; }
+.step-safety { font-size: 13px; color: #ff9c40; margin-top: 6px; }
+.tools-row { margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tools-label { font-size: 14px; color: var(--color-text-secondary); }
 .tool-tag { margin: 2px; }
-.est-time { font-size: 12px; color: var(--color-text-secondary); margin-top: 6px; }
-.safety-notes { margin-top: 6px; }
-.safety-note { font-size: 12px; color: #ff9c40; padding: 2px 0; }
+.est-time { font-size: 14px; color: var(--color-text-secondary); margin-top: 8px; }
+.safety-notes { margin-top: 8px; }
+.safety-note { font-size: 14px; color: #ff9c40; padding: 4px 0; }
 
-.safety-violations, .safety-suggestion { font-size: 12px; padding: 3px 0; }
-.safety-pass { font-size: 12px; color: #52c41a; }
+.safety-violations, .safety-suggestion { font-size: 14px; padding: 4px 0; }
+.safety-pass { font-size: 14px; color: #52c41a; }
 
-.feedback-section { padding-top: 10px; }
-.fb-btns { display: flex; gap: 8px; flex-wrap: wrap; }
-.fb-result { font-size: 13px; color: #52c41a; padding: 8px 0; }
+.feedback-section { padding-top: 12px; }
+.fb-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+.fb-result { font-size: 15px; color: #52c41a; padding: 10px 0; }
 
-.empty-report { text-align: center; padding: 40px 20px; color: var(--color-text-secondary);
-  h4 { margin-bottom: 10px; }
-  p { font-size: 13px; }
+.empty-report { text-align: center; padding: 50px 20px; color: var(--color-text-secondary);
+  h4 { margin-bottom: 12px; font-size: 16px; }
+  p { font-size: 14px; }
 }
 
 // ── 多模态上传面板 ──
