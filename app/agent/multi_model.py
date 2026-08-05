@@ -115,7 +115,7 @@ class MultiModelClient:
 
         if "reasoner" in model or "r1" in model:
             del kwargs["temperature"]
-            kwargs["max_tokens"] = 4096
+            kwargs["max_tokens"] = 2048
 
         response = client.chat.completions.create(**kwargs)
         return response.choices[0].message.content or ""

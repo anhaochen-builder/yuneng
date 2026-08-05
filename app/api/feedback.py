@@ -77,12 +77,18 @@ def _check_lora_threshold():
 def _count_total_samples() -> int:
     accurate = len(FEEDBACK_STORE)
     try:
-        pending = sum(1 for _ in open(Path("data/pending_review.jsonl"), "r") if _.strip())
-    except Exception:
+        pending_path = Path("data/pending_review.jsonl")
+        with open(pending_path, "r", encoding="utf-8") as f:
+            pending = sum(1 for _ in f if _.strip())
+    except (FileNotFoundError, OSError) as e:
+        logger.warning(f"待审核池文件不可用: {e}")
         pending = 0
     try:
-        negative = sum(1 for _ in open(Path("data/negative_samples.jsonl"), "r") if _.strip())
-    except Exception:
+        negative_path = Path("data/negative_samples.jsonl")
+        with open(negative_path, "r", encoding="utf-8") as f:
+            negative = sum(1 for _ in f if _.strip())
+    except (FileNotFoundError, OSError) as e:
+        logger.warning(f"负样本文件不可用: {e}")
         negative = 0
     return accurate + pending + negative
 

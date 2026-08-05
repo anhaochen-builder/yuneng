@@ -72,7 +72,8 @@ class KnowledgeQASubAgent(BaseSubAgent):
                 query, temperature=0.1, max_tokens=256,
             )
             return {K.REWRITTEN_QUERY: rewritten.strip() or query}
-        except Exception:
+        except (json.JSONDecodeError, RuntimeError) as e:
+            logger.debug(f"查询改写失败: {e}")
             return {K.REWRITTEN_QUERY: query}
 
     def _rag_retrieve_node(self, state: dict[str, Any]) -> dict[str, Any]:

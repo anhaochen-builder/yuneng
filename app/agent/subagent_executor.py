@@ -65,7 +65,7 @@ class SubagentExecutor:
                 user_prompt += f"\n\n工具查询结果:\n{tool_results[name]}"
             loop = asyncio.get_event_loop()
             result_text = await loop.run_in_executor(
-                None, lambda: llm.chat(system_prompt, user_prompt, temperature=0.2, max_tokens=2048)
+                None, lambda: llm.chat(system_prompt, user_prompt, temperature=0.1, max_tokens=1024)
             )
             return SubagentTask(name=name, result=result_text, success=True, elapsed=time.time() - start)
         except Exception as e:

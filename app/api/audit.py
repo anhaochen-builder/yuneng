@@ -90,7 +90,8 @@ def _count_lines(relative_path: str) -> int:
         return 0
     try:
         return len(path.read_text(encoding="utf-8").splitlines())
-    except Exception:
+    except (UnicodeDecodeError, OSError, PermissionError) as e:
+        logger.warning(f"审计_行数统计失败({relative_path}): {e}")
         return 0
 
 
@@ -101,7 +102,8 @@ def _count_functions(relative_path: str) -> int:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         return sum(1 for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)))
-    except Exception:
+    except (UnicodeDecodeError, SyntaxError, OSError, PermissionError) as e:
+        logger.warning(f"审计_函数统计失败({relative_path}): {e}")
         return 0
 
 
@@ -112,7 +114,8 @@ def _count_classes(relative_path: str) -> int:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         return sum(1 for node in ast.walk(tree) if isinstance(node, ast.ClassDef))
-    except Exception:
+    except (UnicodeDecodeError, SyntaxError, OSError, PermissionError) as e:
+        logger.warning(f"审计_类统计失败({relative_path}): {e}")
         return 0
 
 
@@ -141,16 +144,16 @@ def _scan_dead_files() -> list[dict]:
                 content = other.read_text(encoding="utf-8")
                 if short in content or module_stem in content:
                     refs.append(str(other.relative_to(BASE_DIR)))
-            except Exception:
-                pass
+            except (UnicodeDecodeError, OSError, PermissionError):
+                continue
 
         scripts_refs = []
         for sf in (BASE_DIR / "scripts").rglob("*.py"):
             try:
                 if short in sf.read_text(encoding="utf-8") or module_stem in sf.read_text(encoding="utf-8"):
                     scripts_refs.append(str(sf.relative_to(BASE_DIR)))
-            except Exception:
-                pass
+            except (UnicodeDecodeError, OSError, PermissionError):
+                continue
 
         all_refs = refs + scripts_refs
         if not all_refs and py_file.stat().st_size > 0:
@@ -283,8 +286,9 @@ async def audit_files():
         try:
             if init_f.stat().st_size == 0:
                 empty_init.append(str(init_f.relative_to(BASE_DIR)))
-        except Exception:
-            pass
+        except (OSError, PermissionError) as e:
+            logger.warning(f"审计_空文件检查失败({init_f}): {e}")
+            continue
 
     return {
         "dead_files": dead,
@@ -343,7 +347,8 @@ def _check_skill_agent_mapping() -> dict[str, Any]:
             "unmapped_skills": unmapped,
             "architecture_note": "每个 Skill 都关联了一个独立编译的 LangGraph 子智能体(CompiledGraph)，不再是 Prompt 字符串模板",
         }
-    except Exception as e:
+    except (ImportError, RuntimeError) as e:
+        logger.warning(f"审计_Skill/Agent 映射检查失败: {e}")
         return {"error": str(e), "all_mapped": False, "mapped": [], "unmapped_skills": []}
 
 

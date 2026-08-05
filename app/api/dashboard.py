@@ -13,6 +13,7 @@ from app.models.schemas import (
     DashboardResponse, DashboardProgress, DashboardPhase,
     DashboardFileStats,
 )
+from app.utils.cache import ttl_cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -92,8 +93,9 @@ def _count_lines(base: Path) -> int:
         if f.is_file():
             try:
                 total += len(f.read_text(encoding="utf-8").splitlines())
-            except Exception:
-                pass
+            except (UnicodeDecodeError, OSError, PermissionError) as e:
+                logger.warning(f"读取文件失败({f}): {e}")
+                continue
     return total
 
 
@@ -109,12 +111,14 @@ def _count_api_endpoints(app_dir: Path) -> int:
                         stripped = line.strip()
                         if stripped.startswith("@router.") and ("/" in stripped or stripped.startswith(".get") or stripped.startswith(".post")):
                             count += 1
-                except Exception:
-                    pass
+                except (UnicodeDecodeError, OSError, PermissionError) as e:
+                    logger.warning(f"读取API文件失败({f}): {e}")
+                    continue
     return count
 
 
 @router.get("")
+@ttl_cache(30)
 async def get_dashboard():
     app_dir = BASE_DIR / "app"
     scripts_dir = BASE_DIR / "scripts"
@@ -181,7 +185,8 @@ async def get_dashboard():
         collections = client.list_collections()
         data_stats["vector_collections"] = len(collections)
         data_stats["knowledge_items"] = sum(c.count() for c in collections)
-    except Exception:
+    except (ImportError, ConnectionError, RuntimeError) as e:
+        logger.warning(f"向量数据库不可用: {e}")
         data_stats["vector_collections"] = 0
 
     try:
@@ -189,8 +194,9 @@ async def get_dashboard():
         mem = get_memory()
         lt = mem.long_term_stats()
         data_stats["cases"] = lt.get("total", 0)
-    except Exception:
-        pass
+    except (ImportError, RuntimeError) as e:
+        logger.warning(f"记忆服务不可用: {e}")
+        data_stats["cases"] = 0
 
     checkpoints_db = BASE_DIR / "data" / "checkpoints.db"
     data_stats["checkpoints"] = checkpoints_db.exists()
@@ -247,7 +253,8 @@ async def get_mode():
             "diagnosis_mode": settings.diagnosis_mode,
             **multi_client.mode_status,
         }
-    except Exception:
+    except ImportError as e:
+        logger.warning(f"多模型客户端不可用: {e}")
         return {
             "diagnosis_mode": settings.diagnosis_mode,
             "current": "unknown",
@@ -259,5 +266,6 @@ def _count_skills() -> int:
     try:
         from app.skill.registry import skill_registry
         return len(skill_registry.list_all())
-    except Exception:
+    except ImportError as e:
+        logger.warning(f"技能注册表不可用: {e}")
         return 0

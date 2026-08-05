@@ -1,0 +1,135 @@
+# 驭能智能诊断系统 — 全模块功能说明
+
+## 一、编排层 (app/graph/) — 核心大脑
+
+### Supervisor 主图
+- `builder.py` (164行) — LangGraph StateGraph 主图，precheck→context_load→router→并行执行→judge→report。9意图分类条件路由，连接8个子Agent子图
+- `state.py` (77行) — AgentState TypedDict 定义
+- `state_keys.py` (95行) — 35个状态键常量类（Replace/Append策略），含输入层/意图层/诊断层/证据层/SCADA层等键名
+- `sub_agent.py` (171行) — BaseSubAgent 基类 + SubAgentRegistry。所有子Agent继承此类，自动build编译为LangGraph子图
+- `sub_agent_init.py` (143行) — 启动时注册8个Skill→SubAgent映射关系
+
+### 8个子智能体子图 (app/graph/subgraphs/)
+- `diagnosis.py` (387行) — 核心诊断子图，9节点：entity_extract→alarm_rag→planner→executor(4并行子Agent)→evidence_validation→diagnose→replanner→risk_assessment→action_recommend，含闭环重规划(最多2次)
+- `scada.py` (212行) — SCADA数据采集子图，4节点：设备连接→数据读取→标准化→注入上下文
+- `multimodal.py` (221行) — 多模态融合子图，3节点：图像分析(QwenVL)→音频分析(AST)→Cross-Attention融合
+- `knowledge_qa.py` (200行) — 知识问答子图，6节点：query_rewrite→rag_retrieve→rerank→answer→review→citation，含重试回路
+- `report.py` (115行) — 报告生成子图，2节点：report_generate→safety_review(安规审查)
+- `chat.py` (63行) — 通用对话子图，1节点：LLM对话
+- `judge.py` (55行) — Judge评分子图，1节点：5维度评分(证据/逻辑/安规/操作/历史，权重25/25/20/20/10)
+- `predictive.py` (379行) — 时序预测子图，3节点：趋势分析→越限检测→事前预警(含线性回归/EWMA/突变点检测/模式聚类)
+- `runners.py` (85行) — 子图异步运行器(含重试逻辑)
+
+### 12个生命周期Hook (app/graph/hooks/)
+- `hooks.py` (232行) — 全部12个Hook定义在一个文件中：
+  PreRouteHook(输入清洗/XSS过滤)、SafetyCheckHook(敏感词拦截)、PostRouteHook(意图校验)、PreRagHook(Query改写)、PostRagHook(召回质量检查)、PreToolUseHook(工具权限)、PostToolUseHook(数据脱敏)、PreDiagnosisHook(证据充足性)、PostDiagnosisHook(风险提示补全)、HumanApprovalHook(高风险审批)、AuditHook(审计日志)、DataMaskingHook(二次脱敏)
+- `hook_engine.py` (空) — HookEngine 注册入口
+
+### 公共节点 (app/graph/nodes/)
+- `common_nodes.py` (109行) — precheck/context_load/router节点实现，NODE_STATUS_MAP状态文本映射
+
+## 二、AI Agent 层 (app/agent/)
+
+- `llm_client.py` (65行) — DeepSeek API 客户端封装，chat()/chat_json()方法
+- `llm_provider.py` (392行) — 三模部署抽象层：DeepSeekProvider(在线)→QwenLocalProvider(本地GGUF)→RuleEngineProvider(纯离线35条规则)。自动降级+60s恢复探测
+- `multi_model.py` (184行) — 双模型Ensemble引擎：deepseek-chat(V4) + deepseek-reasoner(R1) 并行调用交叉验证，置信度0.70-0.92
+- `diagnosis_agent.py` (85行) — DiagnosisAgent，接收知识库上下文+RAG结果，调用LLM生成9项结构化诊断报告
+- `judge_agent.py` (187行) — JudgeAgent，五维度量化评分(0-100分)，等级A/B/C/D/F判定
+- `router_agent.py` (34行) — RouterAgent，9意图分类
+- `risk_review_agent.py` (45行) — RiskReviewAgent，安全合规审查(安规条款引用检查)
+- `subagent_executor.py` (72行) — 4并行子Agent执行器(regulation/metrics/log/ticket)
+
+## 三、API 层 (app/api/)
+
+- `chat.py` (111行) — /api/chat, /api/chat/stream, /api/chat/clear。对话+SSE流式+会话管理
+- `diagnosis.py` (403行) — /api/diagnose, /api/diagnose/stream, /api/diagnose/multimodal, /api/diagnose/multimodal/stream, /api/diagnose/history, /api/diagnose/report/{id}。诊断+多模态+历史+报告
+- `alarm.py` (188行) — /api/alarm/receive(含auto_diagnose自动触发), /api/alarm/diagnose(SSE流式), /api/alarm/diagnose/{id}/status, /api/alarm/checkpoint/{id}。告警接收→自动诊断
+- `knowledge.py` (80行) — /api/knowledge/documents/upload, /api/knowledge/search/test, /api/knowledge/health
+- `scada.py` (144行) — /api/scada/connect(协议/地址/端口/测点), /api/scada/disconnect/{id}, /api/scada/data/{id}, /api/scada/data/{id}/window, /api/scada/buffer/stats, /api/scada/devices, /api/scada/health
+- `feedback.py` (167行) — /api/feedback(三态评价→驱动学习), /api/feedback/stats
+- `trace.py` (95行) — /api/trace/{id}/replay。诊断轨迹回放(state_history)
+- `dashboard.py` (263行) — /api/dashboard, /api/dashboard/phases, /api/dashboard/phases/{id}, /api/dashboard/tasks, /api/dashboard/mode。实时进度监控6个端点
+- `audit.py` (394行) — /api/audit, /api/audit/skills, /api/audit/files, /api/audit/imports。质量审计4个端点，逐文件检查+Skill→Agent映射验证+死文件检测+模块导入健康检查
+- `main.py` (216行) — FastAPI主入口。lifespan启动、CORS、UnifiedResponseMiddleware(统一{code,data,message}响应)、三异常处理、9个router注册、静态文件挂载frontend/dist、/health端点
+
+## 四、知识库与RAG (app/rag/)
+
+- `knowledge_graph.py` (470行) — 48种设备×4维度(alarms/causes/steps/safety)的完整知识图谱，覆盖风力/光伏/储能/变电/无功/线路/保护/站用/控制/通讯10类别。含实体提取+图上下文构建
+- `hybrid_search.py` (329行) — 三重检索+RRF融合+BGE Reranker精排。FastKnowledgeStore(BM25词库)+HybridSearchService(向量+BM25+知识图谱+RRF+Reranker)
+- `graphrag.py` (256行) — GraphRAG引擎，Neo4j+NetworkX双模式。3种设备类型的完整故障树，自动实体提取+图上下文生成
+- `document_parser.py` (593行) — 多格式解析器。PDF(PyMuPDF)+DOCX+EXCEL+TXT/MD，含标题层级检测(字体大小)、表格提取、OCR三引擎降级(PaddleOCR→EasyOCR→pytesseract)
+- `vector_store.py` (174行) — ChromaDB向量存储，BGE-Large-ZH嵌入(768/1024维)，含BCE嵌入加载+降级方案
+- `rerank.py` (164行) — BGE CrossEncoder Reranker精排(BAAI/bge-reranker-v2-m3)，模型缓存+自动降级
+
+## 五、SCADA 数据层 (app/scada/)
+
+- `base.py` (107行) — ScadaDataPoint/DeviceConfig/ScadaReadResult数据类+ProtocolAdapter抽象基类
+- `protocol_factory.py` (103行) — 协议适配器工厂。按设备类型(19种映射)自动选择Modbus/IEC61850/OPC UA适配器
+- `ring_buffer.py` (144行) — 线程安全环形缓冲区。容量180万条(1000测点×60s×30min)，支持push/push_batch/get_window/并发安全
+- `window_extractor.py` (125行) — 故障窗口提取器。告警触发→以告警时刻为中心提取±5分钟数据窗口→计算统计摘要(min/max/mean/std/trend/slope)→按测点分组
+- `data_normalizer.py` (115行) — 数据标准化层。三协议原始数据→统一ScadaDataPoint格式，含统计计算+异常检测
+- `protocols/modbus_adapter.py` (244行) — Modbus TCP适配器(mock+real双模)
+- `protocols/iec61850_adapter.py` (206行) — IEC 61850 MMS适配器
+- `protocols/opcua_adapter.py` (148行) — OPC UA适配器
+
+## 六、多模态层 (app/multimodal/)
+
+- `image_analyzer.py` (286行) — Qwen-VL-Max图像分析器。4种分析模式：红外热像(温度异常检测)、电气图(符号/线路/保护)、设备外观(损伤/腐蚀/变形)、自动。含降级规则模式
+- `audio_analyzer.py` (286行) — AST音频分析器。6种故障声音模式(轴承摩擦/齿轮断齿/电弧放电/变压器嗡声/变频器噪音/叶片哨声)，含librosa特征提取+API降级元数据模式
+- `fusion.py` (380行) — Cross-Attention融合引擎。分模态编码器(文本2048D/图像1024D/音频768D)→线性投影对齐→scaled_dot_product_attention(Text=Query,Image/Audio=Key/Value)→全连接融合层→一致性判断→置信度调整
+
+## 七、记忆系统 (app/memory/)
+
+- `memory_service.py` (229行) — 三层记忆服务。短期(OrderedDict,会话级,最近3轮)、工作(任务状态字典,35状态键)、长期(ChromaDB持久化,时间衰减半衰期180天)。含会话管理+任务追踪+用户域
+
+## 八、主动学习 (app/learning/)
+
+- `case_ingestion.py` (118行) — 成功案例自动入库。用户反馈"准确"→BGE向量化→存入ChromaDB长期记忆集合(含元数据：设备类型/故障类型/时间戳/置信度/操作员)
+- `skill_generator.py` (163行) — Skill自动生成。长期记忆同故障模式≥3次→LLM分析共性→提炼标准化Skill(场景化Prompt+关联工具)，存入SkillRegistry+JSON持久化
+
+## 九、Skill与工具 (app/skill/ + app/tools/)
+
+- `registry.py` (100行) — SkillRegistry。8个Skill注册(新能源故障诊断/SCADA数据分析/多模态融合/知识库问答/报告生成/通用对话/质量评审/时序监控)，含意图→Skill→SubAgent三级映射
+- `registry.py` (77行) — ToolRegistry。6个MCP工具注册(设备状态/告警历史/运行日志/缺陷工单/安全规程/设备台账)，含语义检索+意图匹配+风险等级标签
+
+## 十、MCP 工具服务 (mcp_server/)
+
+- `server.py` (128行) — MCP Server(STDIO+HTTP双模式)。6个Tool定义(get_device_status/get_alarm_history/get_device_logs/get_defect_tickets/search_safety_rules/get_device_profile)
+- `tools.py` (200行) — 6个工具的具体实现函数，含mock数据生成逻辑
+
+## 十一、数据模型 (app/models/)
+
+- `schemas.py` (152行) — Pydantic模型。DiagnosisRequest/ChatRequest/AlarmRequest/RootCause/DiagnosisResult/ActionPlan/SafetyCheck/MultimodalRequest/DashboardStats等
+
+## 十二、脚本 (scripts/)
+
+- `import_real_data.py` (292行) — Fuhrlander真实数据集入库。369告警→22条知识+314SCADA变量→18条语义+10202事件→5条统计
+- `lora_finetune.py` (175行) — LoRA微调脚本。Alpaca JSONL生成，数据采集/去重/校验/分割(train/val/test)
+- `init_knowledge.py` (114行) — 知识库初始化工具
+- `data_ingestion.py` (115行) — 通用数据导入脚本
+
+## 十三、系统总览
+
+```
+主图流程:
+  precheck → context_load → router → [并行]
+    ├── diagnosis_parallel (SCADA+Multimodal+Predictive 并行)
+    │       └── diagnosis (9节点)
+    │           └── judge → report
+    ├── knowledge_qa (6节点)
+    └── chat (1节点)
+
+数据流:
+  用户输入 → 12Hook校验 → 意图路由 → 8子Agent → RAG检索(向量+BM25+图谱)
+  → LLM推理(V4+R1 Ensemble) → Judge评估 → 安全审查 → 报告输出
+  → 用户反馈 → 学习闭环(案例入库→Skill生成→LoRA微调)
+
+核心指标:
+  - 8个子智能体, 12个Hook, 6个MCP工具
+  - 35个状态键, 9意图分类路由
+  - 48种设备×4维度知识图谱(160+条)
+  - Fuhrlander 369告警+314SCADA变量+5年运行数据
+  - 3种部署模式(在线/离线/纯离线)
+  - 深度学习闭环(反馈→案例→Skill→LoRA)
+  - 30+API端点, 统一{code,data,message}响应
+```

@@ -1,4 +1,5 @@
 {
+  "plugin": ["superpowers@git+https://github.com/obra/superpowers.git"],
   "mcpServers": {
     "power-emergency-tools": {
       "command": "python",

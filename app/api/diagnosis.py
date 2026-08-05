@@ -51,7 +51,7 @@ async def diagnose(req: DiagnosisRequest):
         K.DEVICE_ID: req.device_id or "",
         K.SKILL_CONTEXT: skill_context,
         K.LOOP_COUNT: 0,
-        "max_retries": 2,
+        "max_retries": 1,
     }
 
     graph = get_graph()
@@ -112,12 +112,38 @@ async def diagnose_stream(req: DiagnosisRequest):
         K.INTENT: "FAULT_DIAGNOSIS",
         K.SKILL_CONTEXT: skill_context,
         K.LOOP_COUNT: 0,
-        "max_retries": 2,
+        "max_retries": 1,
     }
 
     async def generate():
         try:
             yield f"data: {json.dumps({'type': 'start', 'task_id': task_id})}\n\n"
+            yield f"data: {json.dumps({'type': 'status', 'message': '正在启动诊断...', 'node': 'start'})}\n\n"
+
+            from app.agent.llm_provider import hybrid_llm
+            current_mode = hybrid_llm.current_mode
+
+            if current_mode in ("rule-engine", "qwen-local"):
+                yield f"data: {json.dumps({'type': 'status', 'message': '离线模式：启动案例推理引擎...', 'node': 'offline_diagnosis'})}\n\n"
+                try:
+                    from app.agent.case_reasoner import case_reasoner
+                    offline_result = case_reasoner.diagnose(req.symptoms, req.device_id or "")
+                    yield f"data: {json.dumps({'type': 'diagnosis', 'data': {
+                        'root_causes': [{'cause': offline_result['root_cause'], 'probability': offline_result['confidence']}],
+                        'confidence': offline_result['confidence'],
+                        'risk_level': offline_result['risk_level'],
+                    }}, ensure_ascii=False)}\n\n"
+
+                    report_text = offline_result['report_text']
+                    chunk_size = 200
+                    for i in range(0, len(report_text), chunk_size):
+                        yield f"data: {json.dumps({'type': 'content', 'text': report_text[i:i + chunk_size]}, ensure_ascii=False)}\n\n"
+
+                    yield "data: [DONE]\n\n"
+                    memory.save_to_session(session_id, req.symptoms, report_text)
+                    return
+                except Exception as e:
+                    yield f"data: {json.dumps({'type': 'warning', 'message': f'离线引擎异常，降级LLM: {e}'})}\n\n"
 
             graph = get_graph()
             config = {"configurable": {"thread_id": task_id}}
@@ -144,7 +170,7 @@ async def diagnose_stream(req: DiagnosisRequest):
                 }}, ensure_ascii=False)}\n\n"
 
             response_text = result.get(K.EXECUTION_RESULT, result.get(K.FINAL_RESPONSE, ""))
-            chunk_size = 80
+            chunk_size = 200
             for i in range(0, len(response_text), chunk_size):
                 yield f"data: {json.dumps({'type': 'content', 'text': response_text[i:i + chunk_size]}, ensure_ascii=False)}\n\n"
 
@@ -244,7 +270,7 @@ async def diagnose_multimodal(req: MultimodalRequest):
         "_audio_analysis": audio_result,
         "_image_text": multimodal_text if req.images else "",
         "_audio_text": multimodal_text if req.audio_path else "",
-        "max_retries": 2,
+        "max_retries": 1,
     }
 
     graph = get_graph()
@@ -321,6 +347,25 @@ async def diagnose_multimodal_stream(req: MultimodalRequest):
             if multimodal_text:
                 enriched_input = f"{req.symptoms}\n\n[多模态分析结果]\n{multimodal_text}"
 
+            from app.agent.llm_provider import hybrid_llm
+            if hybrid_llm.current_mode in ("rule-engine", "qwen-local"):
+                yield f"data: {json.dumps({'type': 'status', 'message': '离线模式：启动案例推理引擎...'})}\n\n"
+                try:
+                    from app.agent.case_reasoner import case_reasoner
+                    offline_result = case_reasoner.diagnose(enriched_input, req.device_id or "")
+                    yield f"data: {json.dumps({'type': 'diagnosis', 'data': {
+                        'root_causes': [{'cause': offline_result['root_cause'], 'probability': offline_result['confidence']}],
+                        'confidence': offline_result['confidence'], 'risk_level': offline_result['risk_level'],
+                    }}, ensure_ascii=False)}\n\n"
+                    report_text = offline_result['report_text']
+                    for i in range(0, len(report_text), 200):
+                        yield f"data: {json.dumps({'type': 'content', 'text': report_text[i:i + 200]}, ensure_ascii=False)}\n\n"
+                    yield "data: [DONE]\n\n"
+                    memory.save_to_session(session_id, req.symptoms, report_text)
+                    return
+                except Exception as e:
+                    yield f"data: {json.dumps({'type': 'warning', 'message': f'离线引擎不可用: {e}'})}\n\n"
+
             state: dict = {
                 K.INPUT: enriched_input,
                 K.CLEANED_INPUT: enriched_input,
@@ -337,7 +382,7 @@ async def diagnose_multimodal_stream(req: MultimodalRequest):
                 "_multimodal_audio_path": req.audio_path or "",
                 "_image_text": multimodal_text if req.images else "",
                 "_audio_text": multimodal_text if req.audio_path else "",
-                "max_retries": 2,
+                "max_retries": 1,
             }
 
             graph = get_graph()
@@ -363,7 +408,7 @@ async def diagnose_multimodal_stream(req: MultimodalRequest):
                 }}, ensure_ascii=False)}\n\n"
 
             response_text = result.get(K.EXECUTION_RESULT, result.get(K.FINAL_RESPONSE, ""))
-            chunk_size = 80
+            chunk_size = 200
             for i in range(0, len(response_text), chunk_size):
                 yield f"data: {json.dumps({'type': 'content', 'text': response_text[i:i + chunk_size]}, ensure_ascii=False)}\n\n"
 

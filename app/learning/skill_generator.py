@@ -150,8 +150,8 @@ class SkillGenerator:
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
                 self._generated_skills[data.get("skill_id", f.stem)] = data
-            except Exception:
-                pass
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+                logger.debug(f"读取已生成Skill失败({f.name}): {e}")
 
     def list_generated(self) -> list[dict]:
         return [

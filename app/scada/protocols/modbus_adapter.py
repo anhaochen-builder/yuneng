@@ -130,7 +130,7 @@ class ModbusAdapter(ProtocolAdapter):
         if self._client and not self.mock_mode:
             try:
                 self._client.close()
-            except Exception:
+            except (OSError, AttributeError):
                 pass
         self._connected = False
         self._client = None

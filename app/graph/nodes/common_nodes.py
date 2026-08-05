@@ -16,12 +16,15 @@ NODE_STATUS_MAP: dict[str, str] = {
     "knowledge_qa": "正在检索知识库...",
     "diagnosis": "正在执行智能诊断...",
     "diagnosis_parallel": "正在并行采集数据...",
-    "judge": "正在进行质量评审...",
-    "report": "正在生成报告...",
+    "quality_gate": "质量评审+报告生成...",
     "chat": "正在生成回复...",
     "safety_review": "正在进行安全审查...",
     "final_response": "正在生成诊断报告...",
     "memory_save": "正在保存会话记录...",
+    "plan_execute": "并行制定诊断计划+执行分析...",
+    "evidence_validation": "验证证据充分性...",
+    "risk_action": "风险评估+行动建议生成...",
+    "replanner": "诊断质量复核...",
 }
 
 logger = logging.getLogger(__name__)

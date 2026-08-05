@@ -189,7 +189,8 @@ class MemoryService:
             client = get_chroma_client()
             collection = client.get_or_create_collection(LONG_TERM_COLLECTION)
             return {"total": collection.count()}
-        except Exception:
+        except (RuntimeError, ImportError) as e:
+            logger.warning(f"长期记忆统计失败: {e}")
             return {"total": 0}
 
     # ================================================================

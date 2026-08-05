@@ -48,8 +48,8 @@ def _get_image_encoder():
             from sentence_transformers import SentenceTransformer
             _image_encoder = SentenceTransformer("clip-ViT-B-32-multilingual-v1", device="cpu")
             logger.info("图像编码器已加载: 512D→1024D(投影)")
-        except Exception:
-            logger.debug("多模态图像编码器未安装,使用文本编码器对齐")
+        except (ImportError, OSError) as e:
+            logger.debug(f"图像编码器不可用: {e}, 使用文本编码器对齐")
     return _image_encoder
 
 
@@ -60,8 +60,8 @@ def _get_audio_encoder():
             from sentence_transformers import SentenceTransformer
             _audio_encoder = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
             logger.info("音频语义编码器已加载: 384D→768D(投影)")
-        except Exception:
-            logger.debug("音频编码器未安装,使用文本编码器对齐")
+        except (ImportError, OSError) as e:
+            logger.debug(f"音频编码器不可用: {e}, 使用文本编码器对齐")
     return _audio_encoder
 
 

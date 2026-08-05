@@ -193,7 +193,7 @@ class GraphRAGService:
                 try:
                     edge_data = list(self._nx_graph.get_edge_data(entity, node).items())
                     edge = edge_data[0][1].get("relation", "") if edge_data else ""
-                except Exception:
+                except (KeyError, IndexError, AttributeError):
                     pass
                 related.append({
                     "name": node,

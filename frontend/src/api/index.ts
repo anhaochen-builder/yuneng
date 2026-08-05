@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { autoMask } from '@/utils/mask'
 
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
@@ -9,7 +10,7 @@ http.interceptors.response.use(
   (resp) => {
     const body = resp.data
     if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
-      return { ...resp, data: body.data }
+      return { ...resp, data: autoMask(body.data) }
     }
     return resp
   },

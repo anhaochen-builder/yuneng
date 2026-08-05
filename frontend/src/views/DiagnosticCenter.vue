@@ -1,18 +1,56 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onMounted } from 'vue'
+import { ref, nextTick, watch, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSSE } from '@/hooks/useSSE'
 import { feedbackApi } from '@/api'
+import http from '@/api'
+
+interface ChatMsg {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  timestamp: string
+  taskId?: string
+  report?: any
+  streaming?: boolean
+}
 
 const route = useRoute()
-const { isStreaming, currentStep, streamedContent, diagnosisReport, error, sendMessage, abort } = useSSE()
+const { isStreaming, currentStep, streamedContent, diagnosisReport, error, sendMessage } = useSSE()
 const inputText = ref('')
-const chatMessages = ref<Array<{ role: string; content: string; timestamp: string }>>([])
+const chatMessages = ref<ChatMsg[]>([])
 const messagesEnd = ref<HTMLElement | null>(null)
+const chatContainer = ref<HTMLElement | null>(null)
 const feedbackGiven = ref(false)
 const feedbackResult = ref('')
+const showHistory = ref(false)
+const historyLoaded = ref(false)
+const loadingHistory = ref(false)
+const historySessions = ref<any[]>([])
 
-// 多模态文件
+// 诊断历史
+async function loadHistory() {
+  if (historyLoaded.value) return
+  loadingHistory.value = true
+  try {
+    const res = await http.get('/api/diagnose/history')
+    historySessions.value = res.data?.history || []
+    historyLoaded.value = true
+  } catch (e) {
+    historySessions.value = []
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
+function restoreHistory(session: any) {
+  chatMessages.value = [
+    { role: 'user', content: session.user, timestamp: '' },
+    { role: 'assistant', content: session.assistant, timestamp: '' },
+  ]
+  showHistory.value = false
+}
+
+// 多模态
 const uploadedImages = ref<Array<{ file: File; preview: string; type: string }>>([])
 const uploadedAudio = ref<Array<{ file: File; name: string }>>([])
 const showUploadPanel = ref(false)
@@ -27,15 +65,26 @@ const quickActions = [
   '光伏逆变器直流侧绝缘阻抗降低至300kΩ',
 ]
 
-function scrollBottom() { nextTick(() => messagesEnd.value?.scrollIntoView({ behavior: 'smooth' })) }
+function scrollBottom() { nextTick(() => {
+  if (chatContainer.value) {
+    chatContainer.value.scrollTop = chatContainer.value.scrollHeight
+  }
+})}
+
+// 保留最近 N 轮诊断上下文
+watch(chatMessages, () => {
+  if (chatMessages.value.length > 20) {
+    chatMessages.value = chatMessages.value.slice(-20)
+  }
+}, { deep: true })
 
 async function send() {
   const text = inputText.value.trim()
-  const hasMultimodal = hasFiles()
-  if ((!text && !hasMultimodal) || isStreaming.value) return
+  const hasMulti = hasFiles()
+  if ((!text && !hasMulti) || isStreaming.value) return
 
   let displayText = text || '多模态故障诊断'
-  if (hasMultimodal) {
+  if (hasMulti) {
     const parts: string[] = [text || '请根据以下多模态数据诊断故障']
     if (uploadedImages.value.length) parts.push(`📷 已上传${uploadedImages.value.length}张图片(${uploadedImages.value.map(i=>i.type).join('/')})`)
     if (uploadedAudio.value.length) parts.push(`🎵 已上传${uploadedAudio.value.length}个音频文件`)
@@ -47,14 +96,24 @@ async function send() {
   feedbackGiven.value = false
   await scrollBottom()
 
+  // 插入占位消息，实时更新
+  const assistantMsg: ChatMsg = { role: 'assistant', content: '', timestamp: new Date().toLocaleTimeString(), streaming: true }
+  chatMessages.value.push(assistantMsg)
+
   const apiBase = import.meta.env.VITE_API_BASE_URL || ''
-  if (hasMultimodal) {
-    await sendMessage(`${apiBase}/api/diagnose/multimodal/stream`, { symptoms: text || '多模态故障诊断' })
-  } else {
-    await sendMessage(`${apiBase}/api/diagnose/stream`, { symptoms: text })
+  const streamUrl = hasMulti
+    ? `${apiBase}/api/diagnose/multimodal/stream`
+    : `${apiBase}/api/diagnose/stream`
+
+  await sendMessage(streamUrl, { symptoms: text || '多模态故障诊断' })
+
+  // 流式完成后更新消息
+  assistantMsg.streaming = false
+  assistantMsg.content = streamedContent.value || '诊断完成'
+  assistantMsg.report = diagnosisReport.value || undefined
+  if (diagnosisReport.value?.task_id) {
+    assistantMsg.taskId = diagnosisReport.value.task_id
   }
-  const content = streamedContent.value || '诊断完成，报告已生成'
-  chatMessages.value.push({ role: 'assistant', content, timestamp: new Date().toLocaleTimeString() })
 
   // 清理上传文件
   uploadedImages.value.forEach(i => URL.revokeObjectURL(i.preview))
@@ -62,12 +121,26 @@ async function send() {
   uploadedAudio.value = []
   showUploadPanel.value = false
 
-  await scrollBottom()
+  if (error.value) {
+    assistantMsg.content = `❌ 诊断失败: ${error.value}`
+  }
+
+  scrollBottom()
 }
 
 function useQuick(text: string) { inputText.value = text; send() }
 
-// ── 多模态文件处理 ──
+// 实时同步流式内容到最新 assistant 消息
+watch([streamedContent, currentStep, diagnosisReport], () => {
+  const last = chatMessages.value[chatMessages.value.length - 1]
+  if (last && last.role === 'assistant' && last.streaming) {
+    last.content = streamedContent.value || currentStep.value || ''
+    last.report = diagnosisReport.value || undefined
+    scrollBottom()
+  }
+})
+
+// 多模态文件处理
 function handleImageDrop(e: DragEvent) {
   isDragging.value = false
   addImageFiles(e.dataTransfer?.files)
@@ -100,15 +173,14 @@ function handleAudioSelect() {
     uploadedAudio.value.push({ file: f, name: f.name })
   }
 }
-
 function removeAudio(idx: number) { uploadedAudio.value.splice(idx, 1) }
-
 function hasFiles() { return uploadedImages.value.length > 0 || uploadedAudio.value.length > 0 }
 
 async function submitFeedback(rating: string) {
-  if (!diagnosisReport.value) return
+  const last = [...chatMessages.value].reverse().find(m => m.role === 'assistant' && m.taskId)
+  if (!last?.taskId) return
   try {
-    await feedbackApi.submit(diagnosisReport.value.task_id || 'unknown', rating)
+    await feedbackApi.submit(last.taskId, rating)
     feedbackGiven.value = true
     feedbackResult.value = rating === 'accurate' ? '✅ 感谢反馈！案例已入库' : '📝 感谢反馈，已记录'
   } catch { feedbackResult.value = '反馈提交失败' }
@@ -116,34 +188,62 @@ async function submitFeedback(rating: string) {
 
 function clearChat() {
   chatMessages.value = []
-  showTopology.value = false
-  showMemory.value = false
+  feedbackGiven.value = false
+  feedbackResult.value = ''
+}
+
+function retry() {
+  const lastUser = [...chatMessages.value].reverse().find(m => m.role === 'user')
+  if (lastUser) {
+    chatMessages.value = chatMessages.value.filter(m => m.role !== 'assistant')
+    inputText.value = lastUser.content
+    send()
+  }
+}
+
+function getLastTaskId() {
+  const last = [...chatMessages.value].reverse().find(m => m.role === 'assistant' && m.taskId)
+  return last?.taskId
 }
 
 const q = route.query.q as string
 if (q) { inputText.value = q; setTimeout(send, 500) }
+
+onMounted(() => { loadHistory() })
 </script>
 
 <template>
   <div class="diagnostic-page animate-fade-in">
-    <!-- 左侧: 聊天面板 -->
+    <!-- 全宽对话框 -->
     <div class="chat-panel tech-card">
       <div class="chat-header">
         <h4>🔧 智能诊断对话</h4>
         <div class="chat-header-actions">
+          <el-button size="small" text @click="showHistory = !showHistory" :type="showHistory ? 'primary' : 'default'">
+            <el-icon><component is="Clock" /></el-icon> 历史
+          </el-button>
           <el-button size="small" text @click="showUploadPanel = !showUploadPanel" :type="showUploadPanel ? 'primary' : 'default'">
             <el-icon><component is="Upload" /></el-icon> 多模态
           </el-button>
-          <el-button size="small" text @click="showTopology = !showTopology" :type="showTopology ? 'primary' : 'default'">
-            <el-icon><component is="Share" /></el-icon> 拓扑
-          </el-button>
-          <el-button size="small" text @click="showMemory = !showMemory" :type="showMemory ? 'primary' : 'default'">
-            <el-icon><component is="Collection" /></el-icon> 记忆
-          </el-button>
-          <el-button size="small" text @click="clearChat">
+          <el-button size="small" text @click="clearChat" :disabled="!chatMessages.length">
             <el-icon><component is="Delete" /></el-icon> 清空
           </el-button>
         </div>
+      </div>
+
+      <!-- 历史面板 -->
+      <div v-if="showHistory" class="history-panel animate-slide-up">
+        <div class="history-header">
+          <span>诊断历史 ({{ historySessions.length }}条)</span>
+          <el-button size="small" text @click="loadHistory" :loading="loadingHistory">刷新</el-button>
+        </div>
+        <div class="history-list" v-if="historySessions.length">
+          <div v-for="(h, i) in historySessions" :key="i" class="history-item" @click="restoreHistory(h)">
+            <div class="hi-user">{{ h.user?.slice(0, 80) }}{{ (h.user?.length || 0) > 80 ? '...' : '' }}</div>
+            <div class="hi-assistant">{{ h.assistant?.slice(0, 120) }}{{ (h.assistant?.length || 0) > 120 ? '...' : '' }}</div>
+          </div>
+        </div>
+        <div v-else class="history-empty">暂无诊断历史</div>
       </div>
 
       <!-- 多模态导入面板 -->
@@ -169,7 +269,6 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
             </div>
           </div>
         </div>
-
         <div class="upload-section">
           <div class="upload-label">🎵 设备声音</div>
           <div class="upload-zone" @click="audioInput?.click()">
@@ -187,7 +286,8 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
         </div>
       </div>
 
-      <div class="chat-messages" ref="messagesEnd">
+      <!-- 聊天消息区 -->
+      <div class="chat-messages" ref="chatContainer" @scroll.passive>
         <div v-if="!chatMessages.length && !isStreaming" class="welcome-state">
           <div class="welcome-icon">🩺</div>
           <p class="welcome-title">新能源场站智能诊断</p>
@@ -201,31 +301,116 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
         </div>
 
         <div v-for="(msg, i) in chatMessages" :key="i" :class="['msg', msg.role]">
-          <div class="msg-avatar">{{ msg.role === 'user' ? '👤' : '🤖' }}</div>
+          <div class="msg-avatar">{{ msg.role === 'user' ? '👤' : msg.role === 'system' ? '📢' : '🤖' }}</div>
           <div class="msg-body">
-            <div class="msg-content" v-html="msg.content.replace(/\n/g, '<br>')"></div>
-            <div class="msg-time">{{ msg.timestamp }}</div>
+            <!-- 系统消息 -->
+            <template v-if="msg.role === 'system'">
+              <div class="msg-content">{{ msg.content }}</div>
+            </template>
+
+            <!-- 用户消息 -->
+            <template v-else-if="msg.role === 'user'">
+              <div class="msg-content">{{ msg.content }}</div>
+              <div class="msg-time">{{ msg.timestamp }}</div>
+            </template>
+
+            <!-- 助手消息 — 包含实时流 + 结构化报告 -->
+            <template v-else>
+              <!-- 流式进行中 -->
+              <div v-if="msg.streaming" class="msg-content">
+                <div class="streaming-header">
+                  <span class="typing-dots"><span></span><span></span><span></span></span>
+                  <span class="step-text">{{ currentStep || '诊断中...' }}</span>
+                </div>
+                <div class="stream-preview" v-if="streamedContent || msg.content">{{ msg.content }}</div>
+                <div v-else class="stream-placeholder">
+                  <span class="sp-item">🔍 正在检索历史案例...</span>
+                  <span class="sp-item">📊 正在分析设备数据...</span>
+                  <span class="sp-item">🧠 正在推理根因...</span>
+                </div>
+              </div>
+
+              <!-- 流式完成 — 显示完整报告 -->
+              <div v-else class="msg-content report-content">
+                <!-- 报告头部: 置信度 + 风险等级 -->
+                <div class="report-card-wrap">
+                  <div class="rc-header">
+                    <span class="rc-title">📋 诊断报告</span>
+                    <div class="rc-badges">
+                      <el-tag v-if="msg.report?.risk_level"
+                        :type="msg.report.risk_level === 'CRITICAL' ? 'danger' : msg.report.risk_level === 'HIGH' ? 'warning' : 'info'"
+                        effect="dark" size="small">
+                        {{ msg.report.risk_level }}
+                      </el-tag>
+                      <span v-if="msg.report?.confidence" class="rc-confidence font-digital"
+                        :style="{ color: (msg.report.confidence || 0) > 0.85 ? '#52c41a' : (msg.report.confidence || 0) > 0.7 ? '#ff9c40' : '#ff4d4f' }">
+                        {{ ((msg.report.confidence || 0) * 100).toFixed(0) }}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- 根因列表 -->
+                  <div v-if="msg.report?.root_causes?.length" class="rc-section">
+                    <div class="rc-section-title">🔍 可能原因</div>
+                    <div v-for="(c, j) in msg.report.root_causes" :key="j" class="rc-cause">
+                      <span class="rc-cause-rank">#{{ Number(j) + 1 }}</span>
+                      <span class="rc-cause-text">{{ c.cause }}</span>
+                      <el-progress
+                        :percentage="Math.round((c.probability || 0) * 100)"
+                        :color="(c.probability || 0) > 0.7 ? '#ff4d4f' : (c.probability || 0) > 0.4 ? '#ff9c40' : '#52c41a'"
+                        :stroke-width="6"
+                        style="flex-shrink:0;width:100px"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- 文本内容 -->
+                  <div v-if="msg.content" class="rc-section">
+                    <div class="rc-section-title">📝 分析详情</div>
+                    <div class="rc-text" v-html="msg.content.replace(/\n/g, '<br>')"></div>
+                  </div>
+
+                  <!-- 操作按钮 -->
+                  <div class="rc-actions">
+                    <span class="msg-time">{{ msg.timestamp }}</span>
+                    <div class="rc-action-btns">
+                      <el-button size="small" text @click="retry" :disabled="isStreaming">🔄 重试</el-button>
+                      <el-button size="small" text @click="copyReport(msg)">📋 复制</el-button>
+                    </div>
+                  </div>
+
+                  <!-- 反馈 -->
+                  <div class="rc-feedback" v-if="!feedbackGiven">
+                    <span class="fb-label">这个诊断有帮助吗？</span>
+                    <el-button size="small" type="success" @click="submitFeedback('accurate')" plain>👍 准确</el-button>
+                    <el-button size="small" type="warning" @click="submitFeedback('partially_accurate')" plain>🤔 部分准确</el-button>
+                    <el-button size="small" type="danger" @click="submitFeedback('inaccurate')" plain>👎 不准确</el-button>
+                  </div>
+                  <div v-else class="rc-feedback-result">{{ feedbackResult }}</div>
+                </div>
+              </div>
+            </template>
           </div>
         </div>
 
-        <div v-if="isStreaming" class="msg assistant">
-          <div class="msg-avatar">🤖</div>
-          <div class="msg-body">
-            <div class="streaming">
-              <span class="typing-dots"><span></span><span></span><span></span></span>
-              <span class="step-text">{{ currentStep || '诊断中...' }}</span>
-            </div>
-            <div class="stream-preview">{{ streamedContent }}</div>
-          </div>
-        </div>
+        <div ref="messagesEnd"></div>
       </div>
 
+      <!-- 错误提示 -->
+      <div v-if="error && !isStreaming" class="error-bar">
+        <span>❌ {{ error }}</span>
+        <el-button size="small" text type="danger" @click="retry">重试</el-button>
+        <el-button size="small" text @click="error = ''">关闭</el-button>
+      </div>
+
+      <!-- 快捷操作 -->
       <div class="quick-actions">
         <el-button v-for="act in quickActions" :key="act" size="small" text @click="useQuick(act)" :disabled="isStreaming">
           {{ act.slice(0, 35) }}...
         </el-button>
       </div>
 
+      <!-- 输入区 -->
       <div class="input-row">
         <el-input
           v-model="inputText"
@@ -239,7 +424,7 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
             <el-icon><component is="ChatDotRound" /></el-icon>
           </template>
           <template #append>
-            <el-button @click="send" :disabled="isStreaming || !inputText.trim()" type="primary" style="min-width:100px">
+            <el-button @click="send" :disabled="isStreaming || (!inputText.trim() && !hasFiles())" type="primary" style="min-width:100px">
               <el-icon v-if="isStreaming" class="is-loading"><component is="Loading" /></el-icon>
               {{ isStreaming ? '诊断中' : '发送诊断' }}
             </el-button>
@@ -247,131 +432,56 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
         </el-input>
       </div>
     </div>
-
-    <!-- 右侧: 完整诊断报告 -->
-    <div class="report-panel" v-if="diagnosisReport || chatMessages.length > 0">
-      <div class="tech-card report-card" v-if="diagnosisReport">
-        <div class="report-header">
-          <h4>🔧 诊断报告</h4>
-          <div class="report-badges">
-            <el-tag v-if="diagnosisReport.risk_level" :type="diagnosisReport.risk_level === 'CRITICAL' ? 'danger' : diagnosisReport.risk_level === 'HIGH' ? 'warning' : 'info'" effect="dark">{{ diagnosisReport.risk_level }}</el-tag>
-            <span class="report-confidence font-digital" :style="{color: (Number(diagnosisReport.confidence)||0) > 0.85 ? '#52c41a' : (Number(diagnosisReport.confidence)||0) > 0.7 ? '#ff9c40' : '#ff4d4f'}">
-              {{ ((Number(diagnosisReport.confidence) || 0) * 100).toFixed(0) }}%
-            </span>
-          </div>
-        </div>
-
-        <!-- 1. 告警摘要 -->
-        <div v-if="diagnosisReport.alert_summary" class="report-section">
-          <div class="rs-title">📋 告警摘要</div>
-          <div class="rs-body">{{ diagnosisReport.alert_summary }}</div>
-        </div>
-
-        <!-- 2. 可能原因 -->
-        <div v-if="diagnosisReport.root_causes?.length" class="report-section">
-          <div class="rs-title">🔍 可能原因 ({{ diagnosisReport.root_causes.length }}项)</div>
-          <div v-for="(c, i) in diagnosisReport.root_causes" :key="i" class="cause-card">
-            <div class="cause-header">
-              <span class="cause-rank">#{{ Number(i) + 1 }}</span>
-              <span class="cause-title">{{ c.cause }}</span>
-              <span class="cause-prob font-digital" :style="{ color: (c.probability || 0) > 0.7 ? '#ff4d4f' : (c.probability || 0) > 0.4 ? '#ff9c40' : '#52c41a' }">{{ ((Number(c.probability) || 0) * 100).toFixed(0) }}%</span>
-            </div>
-            <div v-if="c.evidence?.length" class="cause-evidence">
-              <span v-for="(e, j) in c.evidence" :key="j" class="evidence-tag">{{ e }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 3. 详细分析 -->
-        <div v-if="diagnosisReport.analysis || diagnosisReport.detail" class="report-section">
-          <div class="rs-title">📝 详细分析</div>
-          <div class="rs-body">{{ diagnosisReport.analysis || diagnosisReport.detail }}</div>
-        </div>
-
-        <!-- 4. 处置建议 -->
-        <div v-if="diagnosisReport.recommendations?.length || diagnosisReport.suggestions?.length" class="report-section">
-          <div class="rs-title">🛠 处置建议</div>
-          <div v-for="(r, i) in (diagnosisReport.recommendations || diagnosisReport.suggestions || [])" :key="i" class="rec-item">
-            <span class="rec-num">{{ i + 1 }}.</span>
-            <span>{{ r }}</span>
-          </div>
-        </div>
-
-        <!-- 5. 处置方案步骤 -->
-        <div v-if="diagnosisReport.action_plan?.steps?.length" class="report-section">
-          <div class="rs-title">📋 操作步骤</div>
-          <div v-for="(s, i) in diagnosisReport.action_plan.steps" :key="i" class="step-card">
-            <div class="step-header">
-              <span class="step-order">步骤 {{ s.order || i + 1 }}</span>
-              <span class="step-action">{{ s.action }}</span>
-            </div>
-            <div v-if="s.detail" class="step-detail">{{ s.detail }}</div>
-            <div v-if="s.safety_note" class="step-safety">⚠️ {{ s.safety_note }}</div>
-          </div>
-          <div v-if="diagnosisReport.action_plan?.tools_required?.length" class="tools-row">
-            <span class="tools-label">所需工具：</span>
-            <el-tag v-for="t in diagnosisReport.action_plan.tools_required" :key="t" size="small" effect="plain" class="tool-tag">{{ t }}</el-tag>
-          </div>
-          <div v-if="diagnosisReport.action_plan?.estimated_time" class="est-time">⏱ 预计耗时：{{ diagnosisReport.action_plan.estimated_time }}</div>
-          <div v-if="diagnosisReport.action_plan?.safety_notes?.length" class="safety-notes">
-            <div v-for="(sn, i) in diagnosisReport.action_plan.safety_notes" :key="i" class="safety-note">🛡 {{ sn }}</div>
-          </div>
-        </div>
-
-        <!-- 6. 安全审查 -->
-        <div v-if="diagnosisReport.safety_check" class="report-section">
-          <div class="rs-title">🛡 安全审查</div>
-          <div v-if="diagnosisReport.safety_check.violations?.length" class="safety-violations">
-            <div v-for="(v, i) in diagnosisReport.safety_check.violations" :key="i" class="violation-item">❌ {{ v }}</div>
-          </div>
-          <div v-if="diagnosisReport.safety_check.suggestions?.length">
-            <div v-for="(s, i) in diagnosisReport.safety_check.suggestions" :key="i" class="safety-suggestion">💡 {{ s }}</div>
-          </div>
-          <div v-if="!diagnosisReport.safety_check.violations?.length" class="safety-pass">✅ 安全审查通过，无违规项</div>
-        </div>
-
-        <!-- 反馈 -->
-        <div class="report-section feedback-section">
-          <div v-if="!feedbackGiven" class="fb-btns">
-            <el-button size="small" type="success" @click="submitFeedback('accurate')" plain>👍 准确</el-button>
-            <el-button size="small" type="warning" @click="submitFeedback('partially_accurate')" plain>🤔 部分准确</el-button>
-            <el-button size="small" type="danger" @click="submitFeedback('inaccurate')" plain>👎 不准确</el-button>
-          </div>
-          <div v-else class="fb-result">{{ feedbackResult }}</div>
-        </div>
-      </div>
-
-      <div v-else-if="!isStreaming && chatMessages.length > 0" class="tech-card empty-report">
-        <h4>📋 诊断报告</h4>
-        <p>诊断完成后，完整的结构化报告将在此展示</p>
-      </div>
-
-      <div v-if="error" class="tech-card error-card">
-        <h4 style="color:var(--color-critical)">❌ 诊断出错</h4>
-        <p>{{ error }}</p>
-      </div>
-    </div>
   </div>
 </template>
+
+<script lang="ts">
+function copyReport(msg: any) {
+  let text = '诊断报告\n'
+  if (msg.report?.root_causes?.length) {
+    text += '\n可能原因:\n'
+    msg.report.root_causes.forEach((c: any, j: number) => {
+      text += `  #${j+1} ${c.cause} (${Math.round((c.probability||0)*100)}%)\n`
+    })
+  }
+  if (msg.content) text += `\n分析详情:\n${msg.content}\n`
+  navigator.clipboard.writeText(text).catch(() => {})
+}
+</script>
 
 <style scoped lang="scss">
 .diagnostic-page {
   display: flex; gap: 14px; height: calc(100vh - 130px); padding: 8px 16px;
 }
 
-// ── 聊天面板 ──
 .chat-panel {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
-  
+
   .chat-header {
     display: flex; justify-content: space-between; align-items: center;
     padding-bottom: 10px; border-bottom: 1px solid rgba(0,240,255,0.08); margin-bottom: 8px;
-    
     h4 { color: var(--color-accent); font-size: 14px; margin: 0; }
     .chat-header-actions { display: flex; gap: 4px; }
   }
 }
 
+// ── 历史面板 ──
+.history-panel {
+  padding: 8px 12px 12px; border-bottom: 1px solid rgba(0,240,255,0.06);
+  background: rgba(0,240,255,0.02); max-height: 220px; overflow-y: auto;
+}
+.history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 12px; color: var(--color-text-secondary); }
+.history-list { display: flex; flex-direction: column; gap: 6px; }
+.history-item {
+  padding: 8px 10px; background: rgba(0,240,255,0.03); border-radius: 6px;
+  border: 1px solid rgba(0,240,255,0.06); cursor: pointer; transition: border-color 0.2s;
+  &:hover { border-color: var(--color-accent); }
+}
+.hi-user { font-size: 12px; color: var(--color-text-primary); margin-bottom: 3px; }
+.hi-assistant { font-size: 11px; color: var(--color-text-secondary); opacity: 0.75; }
+.history-empty { text-align: center; font-size: 12px; color: var(--color-text-secondary); padding: 16px; }
+
+// ── 聊天消息区 ──
 .chat-messages {
   flex: 1; overflow-y: auto; padding: 12px 4px;
   display: flex; flex-direction: column; gap: 12px;
@@ -387,24 +497,24 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
 }
 
 .msg {
-  display: flex; gap: 10px; max-width: 92%;
+  display: flex; gap: 10px;
   &.user { align-self: flex-end; flex-direction: row-reverse; }
-  &.assistant { align-self: flex-start; }
-  
+  &.assistant, &.system { align-self: flex-start; }
+
   .msg-avatar { font-size: 22px; flex-shrink: 0; width: 32px; text-align: center; }
-  .msg-body { flex: 1; }
+  .msg-body { flex: 1; min-width: 0; }
   .msg-content {
     padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.7;
     color: var(--color-text-primary);
   }
-  
-  &.user .msg-content { background: rgba(0,102,255,0.25); border: 1px solid rgba(0,102,255,0.2); }
-  &.assistant .msg-content { background: rgba(10,22,40,0.8); border: 1px solid rgba(0,240,255,0.1); }
-  
+  &.user .msg-content { background: rgba(0,102,255,0.25); border: 1px solid rgba(0,102,255,0.2); max-width: 85%; margin-left: auto; }
+  &.assistant .msg-content { background: rgba(10,22,40,0.85); border: 1px solid rgba(0,240,255,0.1); }
+  &.system .msg-content { background: rgba(255,156,64,0.1); border: 1px solid rgba(255,156,64,0.15); font-size: 12px; text-align: center; }
   .msg-time { font-size: 10px; color: var(--color-text-secondary); margin-top: 4px; padding: 0 4px; }
 }
 
-.streaming { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; padding: 0 4px; }
+// 流式动画
+.streaming-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .typing-dots span {
   display: inline-block; width: 6px; height: 6px; background: var(--color-accent);
   border-radius: 50%; margin: 0 2px; animation: bounce 1.4s infinite both;
@@ -413,105 +523,44 @@ if (q) { inputText.value = q; setTimeout(send, 500) }
 }
 @keyframes bounce { 0%,80%,100% { transform: scale(0); } 40% { transform: scale(1); } }
 .step-text { font-size: 12px; color: var(--color-accent); }
-.stream-preview { font-size: 13px; color: var(--color-text-secondary); white-space: pre-wrap; padding: 8px 14px; }
+.stream-preview { font-size: 13px; color: var(--color-text-secondary); white-space: pre-wrap; padding: 6px 0;  }
+.stream-placeholder { .sp-item { display: block; font-size: 12px; color: rgba(255,255,255,0.3); padding: 2px 0; animation: pulse-text 2s ease-in-out infinite; &:nth-child(2){animation-delay:0.4s;} &:nth-child(3){animation-delay:0.8s;} } }
+@keyframes pulse-text { 0%,100%{opacity:0.3;} 50%{opacity:0.7;} }
 
+// ── 报告卡片（嵌入聊天） ──
+.report-content { padding: 0 !important; background: transparent !important; border: none !important; }
+.report-card-wrap {
+  background: rgba(10,22,40,0.9); border: 1px solid rgba(0,240,255,0.15); border-radius: 12px; padding: 16px 18px;
+}
+.rc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.rc-title { font-size: 16px; color: var(--color-accent); font-weight: 700; }
+.rc-badges { display: flex; align-items: center; gap: 10px; }
+.rc-confidence { font-size: 20px; font-weight: 700; }
+.rc-section { margin-bottom: 14px; &:last-child { margin-bottom: 0; } }
+.rc-section-title { font-size: 14px; color: var(--color-accent); margin-bottom: 8px; font-weight: 600; }
+.rc-cause { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(0,240,255,0.04); border-radius: 6px; margin-bottom: 6px; border: 1px solid rgba(0,240,255,0.06); }
+.rc-cause-rank { font-weight: 700; color: var(--color-accent); font-size: 14px; min-width: 24px; }
+.rc-cause-text { flex: 1; font-size: 14px; }
+.rc-text { font-size: 14px; color: var(--color-text-secondary); line-height: 1.85; }
+.rc-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(0,240,255,0.06); }
+.rc-action-btns { display: flex; gap: 4px; }
+.rc-feedback { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(0,240,255,0.06); flex-wrap: wrap; }
+.fb-label { font-size: 13px; color: var(--color-text-secondary); margin-right: 4px; }
+.rc-feedback-result { font-size: 13px; color: #52c41a; padding: 8px 0; margin-top: 6px; }
+
+// ── 错误栏 ──
+.error-bar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  background: rgba(255,77,79,0.08); border-top: 1px solid rgba(255,77,79,0.15);
+  font-size: 13px; color: var(--color-critical);
+}
+
+// ── 快捷操作 + 输入 ──
 .quick-actions {
   padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 4px;
   border-top: 1px solid rgba(0,240,255,0.05);
 }
-
-.input-row {
-  padding: 10px 12px; border-top: 1px solid rgba(0,240,255,0.08);
-}
-
-// ── 中间面板 ──
-.middle-panels {
-  width: 340px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px;
-  overflow-y: auto;
-  
-  h4 { color: var(--color-accent); font-size: 13px; margin-bottom: 10px; }
-}
-
-.history-list { display: flex; flex-direction: column; gap: 8px; }
-.history-item {
-  padding: 10px 12px; background: rgba(0,240,255,0.03); border-radius: 6px;
-  border: 1px solid rgba(0,240,255,0.06); cursor: pointer; transition: border-color 0.2s;
-  &:hover { border-color: var(--color-accent); }
-}
-.hi-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-.hi-id { font-size: 11px; color: var(--color-accent); }
-.hi-desc { font-size: 13px; color: var(--color-text-primary); }
-.hi-time { font-size: 11px; color: var(--color-text-secondary); margin-top: 4px; }
-
-// ── 右侧面板 ──
-.right-panels {
-  width: 300px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px;
-}
-
-.report-card {
-  h4 { color: var(--color-accent); margin-bottom: 12px; font-size: 14px; }
-}
-
-.section { margin-bottom: 14px; }
-.section-title { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 6px; font-weight: 600; }
-.cause-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(0,240,255,0.05); font-size: 13px; }
-.cause-rank { font-weight: 700; color: var(--color-accent); min-width: 20px; }
-.cause-text { flex: 1; }
-.cause-prob { font-weight: 700; white-space: nowrap; }
-.suggestion-item { display: flex; align-items: flex-start; gap: 6px; padding: 4px 0; font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
-
-.feedback { .fb-btns { display: flex; gap: 6px; flex-wrap: wrap; } }
-.feedback-result { font-size: 13px; color: #52c41a; padding: 8px 0; }
-.error-card { border-color: rgba(255,77,79,0.3); p { font-size: 13px; color: var(--color-text-secondary); } }
-
-// ── 右侧报告面板 ──
-.report-panel { width: 500px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
-.report-card { h4 { color: var(--color-accent); margin: 0; font-size: 17px; } }
-.report-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
-.report-badges { display: flex; align-items: center; gap: 12px; }
-.report-confidence { font-size: 22px; font-weight: 700; }
-
-.report-section { margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid rgba(0,240,255,0.06);
-  &:last-child { border-bottom: none; margin-bottom: 0; }
-}
-.rs-title { font-size: 15px; color: var(--color-accent); margin-bottom: 10px; font-weight: 600; }
-.rs-body { font-size: 15px; color: var(--color-text-secondary); line-height: 1.9; }
-
-.cause-card { padding: 12px 14px; background: rgba(0,240,255,0.03); border-radius: 8px; margin-bottom: 10px; border: 1px solid rgba(0,240,255,0.06); }
-.cause-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.cause-rank { font-weight: 700; color: var(--color-accent); font-size: 15px; }
-.cause-title { flex: 1; font-size: 15px; font-weight: 600; color: var(--color-text-primary); }
-.cause-prob { font-size: 16px; font-weight: 700; }
-.cause-evidence { display: flex; flex-wrap: wrap; gap: 6px; }
-.evidence-tag { font-size: 12px; padding: 3px 10px; background: rgba(0,240,255,0.08); border-radius: 4px; color: var(--color-text-secondary); }
-
-.rec-item { display: flex; gap: 8px; padding: 6px 0; font-size: 15px; color: var(--color-text-secondary); line-height: 1.7; }
-.rec-num { color: var(--color-accent); font-weight: 600; min-width: 24px; }
-
-.step-card { padding: 12px 14px; background: rgba(82,196,26,0.05); border-radius: 8px; margin-bottom: 10px; border: 1px solid rgba(82,196,26,0.12); }
-.step-header { display: flex; gap: 10px; margin-bottom: 6px; }
-.step-order { color: #52c41a; font-weight: 600; font-size: 14px; }
-.step-action { font-size: 15px; color: var(--color-text-primary); font-weight: 600; }
-.step-detail { font-size: 14px; color: var(--color-text-secondary); line-height: 1.7; }
-.step-safety { font-size: 13px; color: #ff9c40; margin-top: 6px; }
-.tools-row { margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.tools-label { font-size: 14px; color: var(--color-text-secondary); }
-.tool-tag { margin: 2px; }
-.est-time { font-size: 14px; color: var(--color-text-secondary); margin-top: 8px; }
-.safety-notes { margin-top: 8px; }
-.safety-note { font-size: 14px; color: #ff9c40; padding: 4px 0; }
-
-.safety-violations, .safety-suggestion { font-size: 14px; padding: 4px 0; }
-.safety-pass { font-size: 14px; color: #52c41a; }
-
-.feedback-section { padding-top: 12px; }
-.fb-btns { display: flex; gap: 10px; flex-wrap: wrap; }
-.fb-result { font-size: 15px; color: #52c41a; padding: 10px 0; }
-
-.empty-report { text-align: center; padding: 50px 20px; color: var(--color-text-secondary);
-  h4 { margin-bottom: 12px; font-size: 16px; }
-  p { font-size: 14px; }
-}
+.input-row { padding: 10px 12px; border-top: 1px solid rgba(0,240,255,0.08); }
 
 // ── 多模态上传面板 ──
 .upload-panel {

@@ -162,7 +162,8 @@ class DocumentParser:
                 "type": "pdf_table",
                 "row_count": len(rows_text),
             }
-        except Exception:
+        except (ImportError, RuntimeError, json.JSONDecodeError) as e:
+            logger.debug(f"表格提取失败: {e}")
             return None
 
     @staticmethod

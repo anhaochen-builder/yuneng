@@ -85,7 +85,7 @@ class OpcuaAdapter(ProtocolAdapter):
         if self._client:
             try:
                 await self._client.disconnect()
-            except Exception:
+            except (OSError, AttributeError):
                 pass
         self._connected = False
         self._client = None
@@ -113,7 +113,7 @@ class OpcuaAdapter(ProtocolAdapter):
             node = self._client.get_node(point_name)
             raw = await node.read_value()
             return self._make_point(point_name, float(raw), "", "good")
-        except Exception as e:
+        except (OSError, TimeoutError, RuntimeError) as e:
             logger.debug(f"OPC UA 读取失败 {point_name}: {e}")
             return None
 

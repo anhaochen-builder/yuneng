@@ -152,8 +152,8 @@ class FastKnowledgeStore:
                 stored = json.loads(KNOWLEDGE_FILE.read_text(encoding="utf-8"))
                 if isinstance(stored, list) and len(stored) > len(DEFAULT_KNOWLEDGE):
                     docs = stored
-            except Exception:
-                pass
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+                logger.warning(f"知识库文件读取失败，使用默认数据: {e}")
 
         KNOWLEDGE_FILE.parent.mkdir(parents=True, exist_ok=True)
         KNOWLEDGE_FILE.write_text(json.dumps(docs, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -166,7 +166,8 @@ class FastKnowledgeStore:
     def add(self, texts: list[str]) -> int:
         try:
             existing = json.loads(KNOWLEDGE_FILE.read_text(encoding="utf-8")) if KNOWLEDGE_FILE.exists() else []
-        except Exception:
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+            logger.warning(f"知识库文件读取失败: {e}")
             existing = []
         existing.extend(texts)
         KNOWLEDGE_FILE.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -301,15 +302,15 @@ class HybridSearchService:
             ctx = kg.build_graph_context(query)
             if ctx:
                 return [{"id": "kg_ctx", "text": ctx, "metadata": {"source": "knowledge_graph"}, "score": 0.6}]
-        except Exception:
-            pass
+        except (ImportError, RuntimeError) as e:
+            logger.debug(f"知识图谱不可用: {e}")
         try:
             from app.rag.graphrag import graphrag_service
             ctx = graphrag_service.build_graph_context(query)
             if ctx:
                 return [{"id": "graphrag_ctx", "text": ctx, "metadata": {"source": "graphrag"}, "score": 0.6}]
-        except Exception:
-            pass
+        except (ImportError, RuntimeError) as e:
+            logger.debug(f"GraphRAG不可用: {e}")
         return []
 
     def index_keywords(self, documents: list[str]):

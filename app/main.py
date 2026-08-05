@@ -97,7 +97,8 @@ class UnifiedResponseMiddleware(BaseHTTPMiddleware):
                     status_code=response.status_code,
                     content={"code": 0, "data": data, "message": "success"},
                 )
-            except Exception:
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                logger.warning(f"响应体解析失败: {e}")
                 return JSONResponse(
                     status_code=response.status_code,
                     content={"code": 0, "data": body.decode("utf-8", errors="replace"), "message": "success"},

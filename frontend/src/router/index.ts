@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
+  { path: '/login', name: 'Login', component: () => import('@/views/Login.vue'), meta: { title: '登录', noAuth: true } },
   { path: '/', name: 'Dashboard', component: () => import('@/views/Dashboard.vue'), meta: { title: '总览看板' } },
   { path: '/diagnostic', name: 'DiagnosticCenter', component: () => import('@/views/DiagnosticCenter.vue'), meta: { title: '智能诊断中心' } },
   { path: '/scada', name: 'SCADADashboard', component: () => import('@/views/SCADADashboard.vue'), meta: { title: 'SCADA 数据看板' } },
@@ -17,6 +18,10 @@ const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach((to, _from, next) => {
   document.title = `${to.meta.title} - 驭能智能诊断平台`
+  if (!to.meta.noAuth) {
+    const loggedIn = localStorage.getItem('yuneng_auth')
+    if (!loggedIn) return next('/login')
+  }
   next()
 })
 

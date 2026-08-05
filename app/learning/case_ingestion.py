@@ -86,7 +86,8 @@ class CaseIngestionService:
             memory = get_memory()
             results = memory.search_long_term(query, top_k=50, device_type=fault_type)
             return len(results)
-        except Exception:
+        except (ImportError, RuntimeError) as e:
+            logger.debug(f"案例检索失败: {e}")
             return 0
 
     def get_similar_cases(self, fault_type: str, limit: int = 3) -> list[dict]:
@@ -94,7 +95,8 @@ class CaseIngestionService:
             from app.memory.memory_service import get_memory
             memory = get_memory()
             return memory.search_long_term(fault_type, top_k=limit, device_type=fault_type)
-        except Exception:
+        except (ImportError, RuntimeError) as e:
+            logger.debug(f"相似案例检索失败: {e}")
             return []
 
     @staticmethod

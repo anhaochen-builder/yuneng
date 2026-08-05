@@ -193,7 +193,7 @@ const quickAlarms = [
       <div class="diag-result">
         <div v-if="diagResult.root_causes?.length">
           <div v-for="(c, i) in diagResult.root_causes" :key="i" class="cause-row">
-            <span class="cause-rank">#{{ i + 1 }}</span>
+            <span class="cause-rank">#{{ Number(i) + 1 }}</span>
             <span>{{ c.cause }}</span>
             <el-tag size="small" :type="(c.probability||0)>0.7?'danger':(c.probability||0)>0.4?'warning':'success'">
               {{ ((c.probability || 0) * 100).toFixed(0) }}%

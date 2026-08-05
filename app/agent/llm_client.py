@@ -20,7 +20,7 @@ class LLMClient:
         self.model = settings.deepseek_model
 
     def chat(self, system_prompt: str, user_prompt: str, temperature: float = 0.1,
-             max_tokens: int = 4096, response_format: str = None) -> str:
+             max_tokens: int = 2048, response_format: str = None) -> str:
         kwargs = dict(
             model=self.model,
             messages=[

@@ -115,7 +115,8 @@ class FaultPatternLibrary:
         if path.exists():
             try:
                 self._patterns = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"预测模式加载失败: {e}")
                 self._patterns = []
 
     def _save(self):

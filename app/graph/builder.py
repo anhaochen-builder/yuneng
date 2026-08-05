@@ -82,7 +82,7 @@ def route_after_diagnosis(state: AgentState) -> str:
 
     if confidence < settings.confidence_threshold and loop_count <= max_retries:
         return "diagnosis"
-    return "judge"
+    return "quality_gate"
 
 
 def _create_checkpointer():
@@ -91,7 +91,8 @@ def _create_checkpointer():
         db_path = Path(settings.data_dir) / "checkpoints.db"
         db_path.parent.mkdir(parents=True, exist_ok=True)
         return SqliteSaver.from_conn_string(str(db_path))
-    except Exception:
+    except (ImportError, OSError, RuntimeError) as e:
+        logger.warning(f"SqliteSaver 不可用，降级内存模式: {e}")
         return MemorySaver()
 
 
@@ -105,9 +106,8 @@ def build_graph(use_checkpointer: bool = True):
     builder.add_node("knowledge_qa", run_knowledge_qa_subgraph)
     builder.add_node("diagnosis_parallel", diagnosis_parallel_node)
     builder.add_node("diagnosis", run_diagnosis_subgraph)
-    builder.add_node("judge", _judge_wrapper)
+    builder.add_node("quality_gate", _quality_gate_wrapper)
     builder.add_node("chat", run_chat_subgraph)
-    builder.add_node("report", _report_wrapper)
     builder.add_node("memory_save", memory_save_node)
 
     builder.add_edge(START, "precheck")
@@ -119,15 +119,14 @@ def build_graph(use_checkpointer: bool = True):
         {"knowledge_qa": "knowledge_qa", "diagnosis_parallel": "diagnosis_parallel", "chat": "chat"},
     )
 
-    builder.add_edge("knowledge_qa", "judge")
+    builder.add_edge("knowledge_qa", "quality_gate")
     builder.add_edge("diagnosis_parallel", "diagnosis")
     builder.add_conditional_edges(
         "diagnosis", route_after_diagnosis,
-        {"diagnosis": "diagnosis", "judge": "judge"},
+        {"diagnosis": "diagnosis", "quality_gate": "quality_gate"},
     )
-    builder.add_edge("judge", "report")
-    builder.add_edge("chat", "report")
-    builder.add_edge("report", "memory_save")
+    builder.add_edge("chat", "quality_gate")
+    builder.add_edge("quality_gate", "memory_save")
     builder.add_edge("memory_save", END)
 
     checkpointer = _create_checkpointer() if use_checkpointer else None
@@ -136,21 +135,19 @@ def build_graph(use_checkpointer: bool = True):
     return compiled
 
 
-async def _judge_wrapper(state: AgentState) -> dict[str, Any]:
-    from app.graph.sub_agent import sub_agent_registry
-    agent = sub_agent_registry.get("judge-agent")
-    if agent:
-        logger.info("  → Judge 子智能体 (5维度评分)")
-        return await agent.arun(state)
-    return {}
-
-
-async def _report_wrapper(state: AgentState) -> dict[str, Any]:
-    from app.graph.sub_agent import sub_agent_registry
-    agent = sub_agent_registry.get("report-agent")
-    if agent:
-        logger.info("  → Report 子智能体")
-        return await agent.arun(state)
+async def _quality_gate_wrapper(state: AgentState) -> dict[str, Any]:
+    confidence = state.get(K.CONFIDENCE, 0.5)
+    if confidence < 0.7:
+        from app.graph.sub_agent import sub_agent_registry
+        judge_agent = sub_agent_registry.get("judge-agent")
+        if judge_agent:
+            try:
+                result = await judge_agent.arun(state)
+                score = result.get("judge_score", 60)
+                result[K.CONFIDENCE] = max(confidence, score / 100.0)
+                return result
+            except Exception:
+                pass
     return {}
 
 

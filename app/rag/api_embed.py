@@ -70,7 +70,8 @@ def api_rerank_scores(query: str, documents: list[str]) -> Optional[list[float]]
             except ValueError:
                 scores.append(0.5)
         return scores
-    except Exception:
+    except (TypeError, KeyError, RuntimeError) as e:
+        logger.warning(f"API重排失败: {e}")
         return None
 
 

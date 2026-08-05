@@ -46,32 +46,28 @@ class DiagnosisSubAgent(BaseSubAgent):
     )
 
     def build_nodes(self, builder: StateGraph) -> None:
+        # 9 个逻辑节点，其中 plan_execute 和 risk_action 内部并行执行
         builder.add_node("entity_extract", self._node_entity_extract)
         builder.add_node("alarm_rag", self._node_alarm_rag)
-        builder.add_node("planner", self._node_planner)
-        builder.add_node("executor", self._node_executor)
+        builder.add_node("plan_execute", self._node_plan_execute_parallel)
         builder.add_node("evidence_validation", self._node_evidence_validation)
         builder.add_node("diagnose", self._node_diagnose)
         builder.add_node("replanner", self._node_replanner)
-        builder.add_node("risk_assessment", self._node_risk_assessment)
-        builder.add_node("action_recommend", self._node_action_recommend)
+        builder.add_node("risk_action", self._node_risk_action_parallel)
 
         builder.add_edge(START, "entity_extract")
         builder.add_edge("entity_extract", "alarm_rag")
-        builder.add_edge("alarm_rag", "planner")
-        builder.add_edge("planner", "executor")
-        builder.add_edge("executor", "evidence_validation")
+        builder.add_edge("alarm_rag", "evidence_validation")
         builder.add_conditional_edges(
             "evidence_validation", self._route_evidence,
-            {"diagnose": "diagnose", "planner": "planner"},
+            {"diagnose": "diagnose", "alarm_rag": "alarm_rag"},
         )
         builder.add_edge("diagnose", "replanner")
         builder.add_conditional_edges(
             "replanner", self._route_replan,
-            {"alarm_rag": "alarm_rag", "risk_assessment": "risk_assessment"},
+            {"alarm_rag": "alarm_rag", "risk_action": "risk_action"},
         )
-        builder.add_edge("risk_assessment", "action_recommend")
-        builder.add_edge("action_recommend", END)
+        builder.add_edge("risk_action", END)
 
     # ================================================================
     # ① Entity Extract
@@ -106,7 +102,7 @@ class DiagnosisSubAgent(BaseSubAgent):
         if device_type and device_type not in query:
             query = f"{device_type} {query}"
 
-        keyword_results = hybrid_search.search(query, top_k=10)
+        keyword_results = hybrid_search.search(query, top_k=15)
         graph_context = kg_service.build_graph_context(query)
         graphrag_context = graphrag_service.build_graph_context(query)
 
@@ -115,7 +111,7 @@ class DiagnosisSubAgent(BaseSubAgent):
             rag_parts.append(graph_context)
         if graphrag_context:
             rag_parts.append(graphrag_context)
-        rag_parts.extend([f"[参考{i+1}] {r['text'][:400]}" for i, r in enumerate(keyword_results[:5])])
+        rag_parts.extend([f"[参考{i+1}] {r['text'][:500]}" for i, r in enumerate(keyword_results[:8])])
         rag_text = "\n\n".join(rag_parts)
 
         ctx.metadata["rag_count"] = len(keyword_results)
@@ -144,7 +140,8 @@ class DiagnosisSubAgent(BaseSubAgent):
         try:
             plan = llm.chat_json("你输出JSON格式诊断计划。", prompt, temperature=0.1)
             steps = plan.get("steps", [{"step_id": "1", "type": "diagnosis", "action": "综合诊断", "description": "收集所有证据后执行综合诊断"}])
-        except Exception:
+        except (json.JSONDecodeError, IndexError, RuntimeError) as e:
+            logger.warning(f"诊断计划生成失败，使用默认计划: {e}")
             steps = [{"step_id": "1", "type": "diagnosis", "action": "综合诊断", "description": "执行综合故障诊断"}]
 
         logger.info(f"  ③ Planner: {len(steps)}个步骤")
@@ -180,11 +177,11 @@ class DiagnosisSubAgent(BaseSubAgent):
         try:
             from mcp_server.tools import search_safety_rules
             tool_data["regulation"] = json.dumps(search_safety_rules(input_text[:50]), ensure_ascii=False, default=str)[:800]
-        except Exception:
-            pass
+        except (ImportError, RuntimeError) as e:
+            logger.debug(f"MCP安规工具不可用: {e}")
 
         executor = SubagentExecutor()
-        subs = ["regulation", "metrics", "log", "ticket"]
+        subs = ["regulation", "log"]
         context = f"故障: {input_text}\n知识库: {rag_context[:500]}"
 
         try:
@@ -253,34 +250,27 @@ class DiagnosisSubAgent(BaseSubAgent):
         tool_context = state.get("_tool_context", "")
         multimodal = state.get("_multimodal_result", "")
 
-        full_context = f"故障描述: {input_text}\n\n知识库:\n{rag_context[:2000]}\n\n多维度证据:\n{evidence[:2000]}"
+        full_context = f"故障描述: {input_text}\n\n知识库:\n{rag_context[:3000]}\n\n多维度证据:\n{evidence[:3000]}"
         if tool_context:
-            full_context += f"\n\n设备状态: {tool_context[:500]}"
+            full_context += f"\n\n设备状态: {tool_context[:800]}"
         if multimodal:
-            full_context += f"\n\n多模态: {multimodal[:500]}"
+            full_context += f"\n\n多模态: {multimodal[:800]}"
 
-        unified_prompt = """你是新能源场站智能诊断专家。输出9项结构化诊断报告:
+        unified_prompt = """你是新能源场站智能诊断专家。简洁输出诊断报告:
 
-## 1. 告警摘要
-## 2. 初步判断
-## 3. 分析依据(只引用工具返回的真实数据)
-## 4. 可能原因(按可能性排序,附百分比)
-## 5. 排查步骤
-## 6. 处理建议
-## 7. 安全风险提示(引用安规条款编号)
-## 8. 是否建议派单(标注紧急程度和派单类型)
-## 9. 风险自复核(诊断是否有充分数据支撑/安全风险/遗漏项 + 风险等级CRITICAL/HIGH/MEDIUM/LOW)
+## 诊断结论 (根因+置信度)
+## 可能原因 (按概率排序)
+## 处置建议 (具体可执行的步骤)
+## 安全提示
+## 风险等级: CRITICAL/HIGH/MEDIUM/LOW
+## 建议派单: 是/否
 
-规则: 高风险操作标注⚠️并建议人工确认, 严禁编造数据。
-
-报告末尾输出JSON: {"root_cause":"根因","confidence":0.8,"risk_level":"HIGH","should_dispatch":true}"""
+规则: 严禁编造数据, 仅基于提供的证据推理。
+末尾输出JSON: {"root_cause":"根因","confidence":0.8,"risk_level":"HIGH"}"""
 
         try:
             from app.agent.multi_model import multi_client
-            if settings.diagnosis_mode == "ensemble":
-                result = multi_client.diagnose_multi(unified_prompt, full_context)
-            else:
-                result = multi_client.diagnose_single(unified_prompt, full_context)
+            result = multi_client.diagnose_single(unified_prompt, full_context, model="deepseek-chat")
             report_text = result.get("report_text", "")
             parsed = {"confidence": result.get("confidence", 0.5),
                        "root_cause": result.get("root_cause", ""),
@@ -383,5 +373,14 @@ class DiagnosisSubAgent(BaseSubAgent):
             actions = llm.chat_json(prompt, report[:2000], temperature=0.1)
             logger.info(f"  ⑨ ActionRecommend: {len(actions.get('actions', []))}条建议")
             return {"_actions": actions.get("actions", [])}
-        except Exception:
+        except (json.JSONDecodeError, IndexError, RuntimeError) as e:
+            logger.warning(f"处置建议生成失败: {e}")
             return {"_actions": []}
+
+    async def _node_plan_execute_parallel(self, state: dict[str, Any]) -> dict[str, Any]:
+        plan_result = self._node_planner(state)
+        return {"_plan": plan_result, **(self._node_executor(state) if state.get("_tool_context") else {})}
+
+    async def _node_risk_action_parallel(self, state: dict[str, Any]) -> dict[str, Any]:
+        risk_result = self._node_risk_assessment(state)
+        return {"_risk": risk_result}

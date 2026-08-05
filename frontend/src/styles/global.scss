@@ -11,7 +11,21 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-// ── Element Plus 主题覆盖 ──
+// ── Element Plus 主题 ──
+:root {
+  --el-color-primary: #2FA7D1;
+  --el-color-primary-light-3: rgba(47,167,209,0.35);
+  --el-color-primary-light-5: rgba(47,167,209,0.18);
+  --el-color-primary-light-7: rgba(47,167,209,0.08);
+  --el-color-primary-light-9: rgba(47,167,209,0.03);
+  --el-border-radius-base: 6px;
+  --el-fill-color-blank: rgba(4,32,79,0.45);
+  --el-bg-color: rgba(4,32,79,0.35);
+  --el-text-color-primary: #E8ECF1;
+  --el-text-color-regular: #8EA8C8;
+  --el-text-color-placeholder: rgba(142,168,200,0.45);
+}
+
 .el-button--primary {
   --el-button-bg-color: rgba(48, 167, 209, 0.22);
   --el-button-border-color: rgba(48, 167, 209, 0.45);
@@ -19,6 +33,7 @@ html, body {
   --el-button-hover-border-color: rgba(48, 167, 209, 0.65);
   --el-button-text-color: #fff;
 }
+.el-button { transition: all 0.15s ease; }
 
 .el-table {
   --el-table-bg-color: transparent;
@@ -29,102 +44,95 @@ html, body {
   --el-table-header-text-color: var(--color-accent);
   --el-table-row-hover-bg-color: rgba(48, 167, 209, 0.08);
 }
-
 .el-table th.el-table__cell {
   background-color: rgba(48, 167, 209, 0.08);
   font-size: 12px; font-weight: 600;
 }
 
 .el-input__wrapper {
-  background-color: rgba(4, 32, 79, 0.55) !important;
-  border-color: rgba(48, 167, 209, 0.18) !important;
+  background-color: rgba(4, 32, 79, 0.45) !important;
+  border-color: rgba(48, 167, 209, 0.15) !important;
   box-shadow: none !important;
+  transition: border-color 0.15s;
+  &:hover, &.is-focus { border-color: rgba(48, 167, 209, 0.35) !important; }
 }
 .el-input__inner { color: var(--color-text-primary) !important; }
-.el-select .el-input__wrapper { background-color: rgba(4, 32, 79, 0.55) !important; }
+.el-select .el-input__wrapper { background-color: rgba(4, 32, 79, 0.45) !important; }
 .el-progress-bar__outer { background-color: rgba(255, 255, 255, 0.06); }
-.el-dialog { background: rgba(4, 32, 79, 0.95); border: 1px solid rgba(48, 167, 209, 0.18); }
-.el-loading-mask { background-color: rgba(1, 20, 56, 0.6); }
+.el-dialog { background: rgba(4, 28, 66, 0.95); border: 1px solid rgba(48, 167, 209, 0.15); border-radius: 10px; backdrop-filter: blur(12px); }
+.el-loading-mask { background-color: rgba(1, 20, 56, 0.55); }
+.el-tag { border-radius: 4px; }
+.el-menu { border-right: none !important; }
 
-// ── 面板组件 ──
+// ── 面板 ──
 .panel {
   background: var(--color-panel-bg);
-  border: 1px solid rgba(10, 84, 150, 0.25);
-  border-radius: 6px;
-  padding: 15px;
+  border: 1px solid rgba(10, 84, 150, 0.20);
+  border-radius: 8px;
+  padding: 16px;
   position: relative;
   backdrop-filter: blur(10px);
   display: flex; flex-direction: column;
-  box-shadow: var(--shadow-card);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
 
   &::before, &::after {
     content: ''; position: absolute;
     width: 12px; height: 12px;
     border: 2px solid var(--color-accent);
-    opacity: 0.5; transition: opacity 0.3s;
+    opacity: 0.4; transition: opacity 0.3s;
   }
   &::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
   &::after  { bottom: -1px; right: -1px; border-left: none; border-top: none; }
-  &:hover::before, &:hover::after { opacity: 0.8; }
+  &:hover::before, &:hover::after { opacity: 0.7; }
 }
-
 .panel-title {
-  font-size: 15px; font-weight: bold; color: var(--color-accent);
+  font-size: 14px; font-weight: bold; color: var(--color-accent);
   margin-bottom: 10px; display: flex; align-items: center;
-
   &::before {
     content: ''; display: inline-block; width: 4px; height: 16px;
     background: var(--color-accent); margin-right: 8px; border-radius: 2px;
-    box-shadow: 0 0 6px var(--color-accent);
+    box-shadow: 0 0 8px var(--color-accent);
   }
 }
 .panel-unit { font-size: 12px; color: var(--color-text-secondary); margin-left: auto; font-weight: 400; }
 
-.font-digital { font-family: var(--font-digital); }
-
 .tech-card {
   background: var(--color-panel-bg);
-  border: 1px solid rgba(10, 84, 150, 0.22);
-  border-radius: 6px;
+  border: 1px solid rgba(10, 84, 150, 0.18);
+  border-radius: 8px;
   padding: var(--spacing-lg);
   position: relative;
   backdrop-filter: blur(10px);
-  box-shadow: var(--shadow-card);
-
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
   &::before, &::after {
     content: ''; position: absolute;
     width: 10px; height: 10px;
     border: 2px solid var(--color-accent);
-    opacity: 0.45; transition: opacity 0.3s;
+    opacity: 0.35; transition: opacity 0.3s;
   }
   &::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
   &::after  { bottom: -1px; right: -1px; border-left: none; border-top: none; }
-  &:hover::before, &:hover::after { opacity: 0.75; }
+  &:hover::before, &:hover::after { opacity: 0.65; }
 }
 
+.font-digital { font-family: var(--font-digital); }
 .chart-box { flex: 1; width: 100%; min-height: 0; overflow: hidden; }
 
 // ── 滚动条 ──
-::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(48, 167, 209, 0.22); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(48, 167, 209, 0.40); }
+::-webkit-scrollbar-thumb { background: rgba(48, 167, 209, 0.2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(48, 167, 209, 0.35); }
 
-// ── 全局动画 ──
+// ── 动画 ──
 @keyframes breathe { 0%,100%{opacity:0.4} 50%{opacity:1} }
-@keyframes fadeIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-@keyframes fadeInUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes fadeInUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
 @keyframes pulseGlow { 0%,100%{box-shadow:0 0 4px var(--color-critical)} 50%{box-shadow:0 0 20px var(--color-critical),0 0 40px rgba(232,85,85,0.3)} }
+@keyframes cardEnter { from{opacity:0;transform:translateY(12px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
 
 .animate-breathe { animation: breathe 3s ease-in-out infinite; }
-.animate-fade-in { animation: fadeIn 0.5s ease-out; }
 .animate-fade-in-up { animation: fadeInUp 0.5s ease-out; }
 .pulse-glow { animation: pulseGlow 1.5s ease-in-out infinite; }
+.data-glow { text-shadow: 0 0 8px rgba(48, 167, 209, 0.45), 0 0 20px rgba(48, 167, 209, 0.18); }
 
-.data-glow {
-  text-shadow: 0 0 8px rgba(48, 167, 209, 0.45), 0 0 20px rgba(48, 167, 209, 0.18);
-}
-
-::selection {
-  background: rgba(48, 167, 209, 0.28); color: #fff;
-}
+::selection { background: rgba(48, 167, 209, 0.28); color: #fff; }

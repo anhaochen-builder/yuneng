@@ -130,7 +130,7 @@ class Iec61850Adapter(ProtocolAdapter):
         if self._client:
             try:
                 self._client.destroy() if hasattr(self._client, "destroy") else None
-            except Exception:
+            except (OSError, AttributeError):
                 pass
         self._connected = False
         self._client = None

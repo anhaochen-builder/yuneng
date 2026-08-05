@@ -62,7 +62,7 @@ class ProtocolFactory:
                 s.close()
                 logger.info("Modbus 502端口可达，切换到真实模式")
                 return False
-            except Exception:
+            except (OSError, TimeoutError, ConnectionRefusedError):
                 logger.info("SCADA 端口不可达，使用模拟模式")
                 return True
         return True
