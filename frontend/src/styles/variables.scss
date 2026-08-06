@@ -17,9 +17,9 @@
   --color-accent-yellow: #F0C040;
   --color-accent-purple: #8B80F0;
   
-  // 文字色 (取自效果图亮色区域)
-  --color-text-primary: #E8ECF1;
-  --color-text-secondary: #8EA8C8;
+  // 文字色 — 次要文字提亮放大
+  --color-text-primary: #F5F8FC;
+  --color-text-secondary: #CCDCE8;
   
   // 状态色
   --color-critical: #E85555;
@@ -27,9 +27,9 @@
   --color-medium: #F0D060;
   --color-low: #40C970;
   
-  // 字体
+  // 字体 — 优先中文优化字体
   --font-digital: 'Orbitron', 'Share Tech Mono', monospace;
-  --font-body: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --font-body: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'WenQuanYi Micro Hei', sans-serif;
   
   // 间距
   --spacing-xs: 4px;

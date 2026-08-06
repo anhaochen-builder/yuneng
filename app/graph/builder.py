@@ -87,13 +87,19 @@ def route_after_diagnosis(state: AgentState) -> str:
 
 def _create_checkpointer():
     try:
-        from langgraph.checkpoint.sqlite import SqliteSaver
-        db_path = Path(settings.data_dir) / "checkpoints.db"
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        return SqliteSaver.from_conn_string(str(db_path))
-    except (ImportError, OSError, RuntimeError) as e:
-        logger.warning(f"SqliteSaver 不可用，降级内存模式: {e}")
-        return MemorySaver()
+        import aiosqlite
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+        db_path = str(Path(settings.data_dir) / "checkpoints.db")
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        conn = aiosqlite.connect(db_path)
+        saver = AsyncSqliteSaver(conn)
+        logger.info(f"AsyncSqliteSaver 持久化就绪: {db_path}")
+        return saver
+    except (ImportError, OSError) as e:
+        logger.warning(f"AsyncSqliteSaver 不可用: {e}")
+    except RuntimeError as e:
+        logger.warning(f"AsyncSqliteSaver 事件循环绑定失败，降级内存模式: {e}")
+    return MemorySaver()
 
 
 def build_graph(use_checkpointer: bool = True):
@@ -146,16 +152,10 @@ async def _quality_gate_wrapper(state: AgentState) -> dict[str, Any]:
                 score = result.get("judge_score", 60)
                 result[K.CONFIDENCE] = max(confidence, score / 100.0)
                 return result
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Judge Agent 评估失败: {e}")
     return {}
 
 
-_graph_instance = None
-
-
 def get_graph():
-    global _graph_instance
-    if _graph_instance is None:
-        _graph_instance = build_graph()
-    return _graph_instance
+    return build_graph()

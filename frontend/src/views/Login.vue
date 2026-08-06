@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import api from '@/api'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -24,12 +25,17 @@ async function login() {
   }
   loading.value = true
   error.value = ''
-  await new Promise(r => setTimeout(r, 800))
-  if (username.value === 'admin' && password.value === 'yuneng2024') {
-    auth.login(username.value)
+  try {
+    const res = await api.post('/api/auth/login', {
+      username: username.value.trim(),
+      password: password.value,
+    })
+    const data = res.data?.data || res.data
+    auth.login(data.user?.username || username.value, data.token)
     router.replace('/')
-  } else {
-    error.value = '用户名或密码错误'
+  } catch (e: any) {
+    error.value = e?.response?.data?.message || '登录失败'
+  } finally {
     loading.value = false
   }
 }
@@ -100,7 +106,7 @@ async function login() {
 }
 .login-bg {
   position: fixed; inset: 0; z-index: 0;
-  background: url('/effect-bg.jpg') center/cover no-repeat;
+  background: url('/effect-bg.png') center/cover no-repeat;
 }
 
 // 湖面电流

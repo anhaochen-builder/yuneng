@@ -9,6 +9,7 @@ RRF 算法: score(d) = Σ weight_s / (k + rank_s(d)), k=60
 权重: 向量=1.0, BM25=1.0, 图谱=0.8
 """
 
+import hashlib
 import json
 import logging
 import math
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import settings
+from app.utils.cache import get_cache
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +261,10 @@ class HybridSearchService:
         self._store = get_knowledge_store()
 
     def search(self, query: str, top_k: int = 10, use_rerank: bool = True) -> list[dict]:
+        cache_key = f"hs:{hashlib.md5(f'{query}_{top_k}_{use_rerank}'.encode()).hexdigest()[:12]}"
+        cached_result = get_cache().get(cache_key)
+        if cached_result is not None:
+            return cached_result
         """执行完整混合检索管道"""
         if not query:
             return []
@@ -279,13 +285,18 @@ class HybridSearchService:
             # 降级: 任何一路有结果就返回
             fused = vector_results or bm25_results or []
 
-        # BGE Reranker 精排
+        # BGE Reranker 精排 (单例缓存，避免每次创建)
         if use_rerank and len(fused) > top_k:
-            from app.rag.rerank import BGECrossEncoderReranker
-            reranker = BGECrossEncoderReranker()
-            fused = reranker.rerank(query, fused, top_k=top_k)
+            from app.rag.rerank import get_reranker
+            try:
+                reranker = get_reranker()
+                fused = reranker.rerank(query, fused, top_k=top_k)
+            except Exception:
+                pass
 
-        return fused[:top_k]
+        result = fused[:top_k]
+        get_cache().set(cache_key, result, ttl=120)
+        return result
 
     def _vector_search(self, query: str) -> list[dict]:
         try:

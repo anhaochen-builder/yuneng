@@ -1,14 +1,21 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { dashboardApi, auditApi, healthCheck, feedbackApi, skillsApi } from '@/api'
+import api from '@/api'
 
-const mode = ref('production-online')
+const mode = ref<string>('production-online')
 const audit = ref<any>({})
 const health = ref<any>({})
 const loading = ref(true)
 const feedbackStats = ref({ total_accurate: 0, total_partial: 0, total_inaccurate: 0 })
+const llmConfig = ref({ api_key: '', base_url: '', model: '', reasoner_model: '' })
+const llmPresets = ref<Array<{label:string;base_url:string;model:string;reasoner:string}>>([])
+const llmSaving = ref(false)
+const llmResult = ref('')
 const skillsList = ref<any[]>([])
 const agentsList = ref<any[]>([])
+const rlhfStatus = ref<any>({ feedback: {}, datasets: [], model_versions: { versions: [], active: null } })
+const rlhfLoading = ref('')
 
 onMounted(async () => {
   try { const r = await dashboardApi.mode(); mode.value = (r.data || r).current || 'production-online' } catch {}
@@ -16,10 +23,12 @@ onMounted(async () => {
   try { const r = await healthCheck(); health.value = r.data || r } catch {}
   try { const r = await feedbackApi.stats(); Object.assign(feedbackStats.value, r.data || r) } catch {}
   try { const r = await skillsApi.list(); const d = r.data || r; skillsList.value = d.skills || []; agentsList.value = d.sub_agents || [] } catch {}
+  try { const r = await api.get('/api/rlhf/status'); rlhfStatus.value = (r.data as any).data || rlhfStatus.value } catch {}
+  try { const r = await api.get('/api/settings/llm'); const d = (r.data as any).data; llmConfig.value = { api_key: d.api_key || '', base_url: d.base_url || '', model: d.model || '', reasoner_model: d.reasoner_model || '' }; llmPresets.value = d.presets || [] } catch {}
   loading.value = false
 })
 
-const modeLabel = (m: string) => m === 'production-online' ? '生产在线' : m === 'standard-offline' ? '标准离线' : '纯离线'
+const modeLabel = (m: string | undefined) => m === 'production-online' ? '生产在线' : m === 'standard-offline' ? '标准离线' : '纯离线'
 
 const services = [
   { name: 'LLM 引擎', status: mode.value !== 'rule-engine' ? 'online' : 'degraded', detail: 'DeepSeek V4 Pro' },
@@ -30,6 +39,47 @@ const services = [
 
 function getColor(s: string) {
   return s === 'online' ? '#52c41a' : s === 'warning' ? '#ff9c40' : '#8ba0c8'
+}
+
+const versionList = () => rlhfStatus.value?.model_versions?.versions || []
+const activeVersion = () => rlhfStatus.value?.model_versions?.active
+const feedbackReady = () => (rlhfStatus.value?.feedback?.accurate || 0) >= 50
+const datasetCount = () => (rlhfStatus.value?.datasets || []).length
+
+async function rlhfAction(action: string) {
+  rlhfLoading.value = action
+  try {
+    const endpoints: Record<string, string> = { prepare: '/api/rlhf/prepare', train: '/api/rlhf/train' }
+    const url = endpoints[action]
+    if (url) await api.post(url)
+    const r = await api.get('/api/rlhf/status')
+    rlhfStatus.value = (r.data as any).data || rlhfStatus.value
+  } catch {}
+  rlhfLoading.value = ''
+}
+async function deployVersion(v: string) {
+  await api.post('/api/rlhf/deploy', { version: v })
+  const r = await api.get('/api/rlhf/status')
+  rlhfStatus.value = (r.data as any).data || rlhfStatus.value
+}
+
+function applyPreset(p: any) {
+  llmConfig.value.base_url = p.base_url
+  llmConfig.value.model = p.model
+  llmConfig.value.reasoner_model = p.reasoner
+}
+
+async function saveLlmConfig() {
+  llmSaving.value = true
+  llmResult.value = ''
+  try {
+    await api.post('/api/settings/llm', llmConfig.value)
+    llmResult.value = '✅ 配置已保存，正在热重载 LLM 客户端...'
+    setTimeout(() => { llmResult.value = '✅ LLM 配置已生效' }, 3000)
+  } catch {
+    llmResult.value = '❌ 保存失败'
+  }
+  llmSaving.value = false
 }
 </script>
 
@@ -48,7 +98,6 @@ function getColor(s: string) {
     </div>
 
     <div class="grid-3col">
-      <!-- 系统信息 -->
       <div class="tech-card">
         <h4>系统信息</h4>
         <div class="info-list">
@@ -61,7 +110,6 @@ function getColor(s: string) {
         </div>
       </div>
 
-      <!-- 服务状态 -->
       <div class="tech-card">
         <h4>服务状态</h4>
         <div class="status-list">
@@ -76,7 +124,6 @@ function getColor(s: string) {
         </div>
       </div>
 
-      <!-- 资源使用 -->
       <div class="tech-card">
         <h4>资源用量</h4>
         <div class="resource-list">
@@ -116,7 +163,7 @@ function getColor(s: string) {
         <div class="learn-items">
           <div class="li-row"><span>成功案例入库</span><el-progress :percentage="Math.min(((feedbackStats.total_accurate||0)/50)*100,100)" :stroke-width="6" color="#52c41a" style="flex:1;margin:0 10px" /><span class="font-digital">{{ feedbackStats.total_accurate || 0 }}/50</span></div>
           <div class="li-row"><span>Skill 生成</span><el-progress :percentage="Math.min(((feedbackStats.total_accurate||0)/3)*100,100)" :stroke-width="6" color="#00f0ff" style="flex:1;margin:0 10px" /><span class="font-digital">≥3例触发</span></div>
-          <div class="li-row"><span>LoRA 微调</span><el-progress :percentage="Math.min(((feedbackStats.total_accurate||0)/50)*100,100)" :stroke-width="6" color="#7b68ee" style="flex:1;margin:0 10px" /><span class="font-digital">≥50例触发</span></div>
+          <div class="li-row"><span>RLHF 微调</span><el-progress :percentage="Math.min((rlhfStatus.feedback?.accurate||0)/50*100,100)" :stroke-width="6" color="#7b68ee" style="flex:1;margin:0 10px" /><span class="font-digital">{{ rlhfStatus.feedback?.accurate || 0 }}/50</span></div>
         </div>
       </div>
 
@@ -131,6 +178,63 @@ function getColor(s: string) {
             <span class="am-name">{{ a.name }}</span>
             <el-tag size="small" type="success">active</el-tag>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RLHF 模型管理 -->
+    <div class="tech-card">
+      <h4>RLHF 模型管理</h4>
+      <div class="rlhf-bar">
+        <span>总反馈 {{ rlhfStatus.feedback?.total || 0 }} 条 | 准确 {{ rlhfStatus.feedback?.accurate || 0 }} 条</span>
+        <div class="rlhf-actions">
+          <el-button size="small" type="primary" :loading="rlhfLoading === 'prepare'" :disabled="!feedbackReady()" @click="rlhfAction('prepare')">
+            {{ feedbackReady() ? '准备微调数据集' : '需 50 条准确反馈' }}
+          </el-button>
+          <el-button size="small" type="success" :loading="rlhfLoading === 'train'" :disabled="datasetCount() === 0" @click="rlhfAction('train')">
+            触发 LoRA 微调
+          </el-button>
+        </div>
+      </div>
+      <div class="rlhf-models" v-if="versionList().length">
+        <div v-for="v in versionList()" :key="v.id" class="model-row" :class="{ active: v.id === activeVersion() }">
+          <span class="model-id">v{{ v.id }}</span>
+          <span class="model-samples">{{ v.samples }} 样本</span>
+          <span class="model-date">{{ v.created_at?.slice(0, 10) }}</span>
+          <span v-if="v.id === activeVersion()" class="model-active">当前</span>
+          <el-button v-else size="small" text type="primary" @click="deployVersion(v.id)">部署</el-button>
+        </div>
+      </div>
+      <div v-else class="rlhf-empty">暂无模型版本，积累 50 条准确反馈后可开始微调</div>
+    </div>
+
+    <!-- LLM 配置 -->
+    <div class="tech-card">
+      <h4>🤖 LLM 模型配置（热切换）</h4>
+      <div class="preset-bar">
+        <span class="preset-label">预设模型:</span>
+        <el-button v-for="p in llmPresets" :key="p.label" size="small" text @click="applyPreset(p)">{{ p.label }}</el-button>
+      </div>
+      <div class="llm-form">
+        <div class="llm-row">
+          <label>API Key</label>
+          <el-input v-model="llmConfig.api_key" placeholder="sk-..." type="password" show-password size="small" />
+        </div>
+        <div class="llm-row">
+          <label>API 地址</label>
+          <el-input v-model="llmConfig.base_url" placeholder="https://api.deepseek.com/v1" size="small" />
+        </div>
+        <div class="llm-row">
+          <label>对话模型</label>
+          <el-input v-model="llmConfig.model" placeholder="deepseek-chat" size="small" />
+        </div>
+        <div class="llm-row">
+          <label>推理模型</label>
+          <el-input v-model="llmConfig.reasoner_model" placeholder="deepseek-reasoner" size="small" />
+        </div>
+        <div class="llm-actions">
+          <el-button type="primary" size="small" :loading="llmSaving" @click="saveLlmConfig">保存并热重载</el-button>
+          <span v-if="llmResult" class="llm-result">{{ llmResult }}</span>
         </div>
       </div>
     </div>
@@ -205,4 +309,22 @@ h4 { color: var(--color-accent); margin: 0 0 12px; font-size: 14px; }
 .agent-mini-list { display: flex; flex-direction: column; gap: 6px; }
 .am-item { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; background: rgba(0,240,255,0.03); border-radius: 4px; }
 .am-name { font-size: 13px; color: var(--color-text-primary); }
+
+.rlhf-bar { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 12px; }
+.rlhf-actions { display: flex; gap: 8px; }
+.model-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(0,240,255,0.06); font-size: 12px; }
+.model-row.active { background: rgba(64,201,160,0.05); }
+.model-id { color: var(--color-accent); font-family: monospace; min-width: 140px; }
+.model-samples, .model-date { color: var(--color-text-secondary); }
+.model-active { color: #52c41a; font-weight: 600; }
+.rlhf-empty { font-size: 12px; color: var(--color-text-secondary); padding: 8px 0; }
+
+.preset-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.preset-label { color: var(--color-text-secondary); font-size: 12px; }
+.llm-form { display: flex; flex-direction: column; gap: 10px; }
+.llm-row { display: flex; align-items: center; gap: 10px; }
+.llm-row label { width: 80px; color: var(--color-text-secondary); font-size: 12px; text-align: right; }
+.llm-row .el-input { flex: 1; }
+.llm-actions { display: flex; align-items: center; gap: 12px; }
+.llm-result { font-size: 12px; color: #52c41a; }
 </style>

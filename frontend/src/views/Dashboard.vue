@@ -19,6 +19,8 @@ const alarmTypes = ref<Array<{ name: string; value: number; color: string }>>([
   { name: '绝缘降低', value: 15, color: '#8B80F0' },
 ])
 
+const weather = ref({ temp: '--', humidity: '--', wind: '--', desc: '--', alerts: [] as string[] })
+
 const animStats = reactive({
   onlineDevices: 0, totalDevices: 9,
   todayDiagnoses: 0, accuracy: 0, avgResponseTime: 0,
@@ -50,8 +52,21 @@ async function loadData() {
   animateCounter('avgResponseTime', stats.avgResponseTime || 3.2)
 }
 
+async function loadWeather() {
+  try {
+    const r = await import('@/api').then(m => m.default.get('/api/field/weather'))
+    const d = (r.data as any)?.data || r.data
+    weather.value.temp = d?.temp || '--'
+    weather.value.humidity = d?.humidity || '--'
+    weather.value.wind = d?.wind || '--'
+    weather.value.desc = d?.desc || '--'
+    weather.value.alerts = d?.alerts || []
+  } catch {}
+}
+
 onMounted(async () => {
   await loadData()
+  loadWeather()
   loading.value = false
   initCharts()
   window.addEventListener('resize', handleResize)
@@ -75,27 +90,6 @@ function initCharts() {
     const commonGrid = { top: 32, right: 12, bottom: 20, left: 42 }
 
     // ═══ 左列 ═══
-    // 模块1: 近7日诊断趋势
-    const m1 = echarts.init(document.getElementById('m1')!)
-    m1.setOption({
-      grid: { ...commonGrid },
-      xAxis: { type: 'category', data: ['周一','周二','周三','周四','周五','周六','周日'], boundaryGap: false,
-        axisLine: { lineStyle: { color: 'rgba(10,84,150,0.3)' } },
-        axisLabel: { color: '#8ba0c8', fontSize: 10 } },
-      yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(47,167,209,0.08)' } },
-        axisLabel: { color: '#8ba0c8', fontSize: 10 } },
-      series: [{
-        type: 'line', smooth: true, symbol: 'circle', symbolSize: 7,
-        data: [8, 12, 9, 15, 11, 14, 12],
-        lineStyle: { width: 3, color: new echarts.graphic.LinearGradient(0, 0, 1, 0, gradientFrom('#2FA7D1', '#8B80F0')) },
-        itemStyle: { color: '#2FA7D1', borderColor: 'rgba(0,240,255,0.4)', borderWidth: 2 },
-        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, gradientFrom('rgba(47,167,209,0.3)', 'rgba(47,167,209,0)')) },
-        markLine: { silent: true, symbol: 'none', label: { formatter: '均值 11.6', color: '#8B80F0', fontSize: 10 },
-          lineStyle: { color: '#8B80F0', type: 'dashed', width: 1 }, data: [{ yAxis: 11.6 }] }
-      }]
-    })
-    charts.push(m1)
-
     // 模块2: 24h诊断频次
     const m2 = echarts.init(document.getElementById('m2')!)
     const hours = Array.from({length:12},(_,i)=>`${i*2}:00`)
@@ -237,8 +231,20 @@ function initCharts() {
       <!-- 左列: 3个模块 -->
       <div class="side-col">
         <div class="viz-panel">
-          <div class="vp-hdr"><span>📈 近7日诊断趋势</span><span class="vp-badge">本月 {{stats.monthDiagnoses||347}}次</span></div>
-          <div id="m1" class="chart-box"></div>
+          <div class="vp-hdr"><span>🌤 场站气象</span><span class="vp-badge">实时</span></div>
+          <div class="weather-panel">
+            <div class="weather-main">
+              <span class="weather-temp">{{ weather.temp }}°C</span>
+              <span class="weather-desc">{{ weather.desc }}</span>
+            </div>
+            <div class="weather-details">
+              <div class="wd-item"><span>湿度</span><span>{{ weather.humidity }}%</span></div>
+              <div class="wd-item"><span>风速</span><span>{{ weather.wind }} km/h</span></div>
+            </div>
+            <div v-if="weather.alerts.length" class="weather-alerts">
+              <div v-for="a in weather.alerts" :key="a" class="wa-item">⚠️ {{ a }}</div>
+            </div>
+          </div>
         </div>
         <div class="viz-panel">
           <div class="vp-hdr"><span>🕐 24h诊断频次</span><span class="vp-badge">峰值 12 次</span></div>
@@ -419,4 +425,15 @@ function initCharts() {
   &.orange { background: rgba(240,192,64,0.12); color: #F0C040; }
 }
 .chart-box { flex: 1; min-height: 0; }
+
+.weather-panel { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 10px 0; }
+.weather-main { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.weather-temp { font-size: 2.2em; font-weight: 700; color: #40E0D0; }
+.weather-desc { font-size: 1em; color: #8EA8C8; }
+.weather-details { display: flex; gap: 20px; margin-bottom: 10px; }
+.wd-item { display: flex; flex-direction: column; gap: 2px; }
+.wd-item span:first-child { font-size: 0.7em; color: #5A7A9A; }
+.wd-item span:last-child { font-size: 1em; color: #A0B8D0; font-weight: 600; }
+.weather-alerts { display: flex; flex-direction: column; gap: 4px; }
+.wa-item { font-size: 0.75em; color: #F0A040; line-height: 1.4; }
 </style>

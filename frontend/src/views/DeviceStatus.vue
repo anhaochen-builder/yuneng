@@ -12,6 +12,7 @@ const querying = ref(false)
 const searchText = ref('')
 const showAddDialog = ref(false)
 const adding = ref(false)
+const deviceZoomed = ref(false)
 const newDevice = ref({
   device_id: '', device_type: 'inverter', name: '', host: '127.0.0.1',
   port: 502, protocol: '', location: '', manufacturer: '', model: '',
@@ -111,7 +112,7 @@ async function addDevice() {
           <el-table-column prop="device_id" label="设备ID" width="95" />
           <el-table-column prop="name" label="名称" width="95" />
           <el-table-column prop="device_type" label="类型" width="90">
-            <template #default="{ row: r }"><el-tag size="small" effect="plain">{{ r.device_type === 'wind_turbine' ? '风机' : r.device_type === 'inverter' ? '逆变器' : r.device_type === 'transformer' ? '变压器' : r.device_type === 'combiner_box' ? '汇流箱' : r.device_type }}</el-tag></template>
+            <template #default="{ row: r }"><el-tag size="small">{{ r.device_type === 'wind_turbine' ? '风机' : r.device_type === 'inverter' ? '逆变器' : r.device_type === 'transformer' ? '变压器' : r.device_type === 'combiner_box' ? '汇流箱' : r.device_type }}</el-tag></template>
           </el-table-column>
           <el-table-column prop="status" label="状态" width="75">
             <template #default="{ row: r }"><el-tag size="small" :type="statusColor(r.status)">{{ statusText(r.status) }}</el-tag></template>
@@ -156,7 +157,14 @@ async function addDevice() {
       </div>
     </div>
 
-    <el-dialog v-model="showAddDialog" title="添加新设备" width="500px">
+    <el-dialog v-model="showAddDialog" width="520px">
+      <template #header>
+        <span>添加新设备</span>
+        <el-button size="small" text @click="deviceZoomed = !deviceZoomed" style="float:right;font-size:16px">
+          {{ deviceZoomed ? '🔍' : '🔎' }}
+        </el-button>
+      </template>
+      <div :class="deviceZoomed ? '' : 'compact-80'">
       <el-form :model="newDevice" label-width="80px" size="small">
         <el-form-item label="设备ID" required><el-input v-model="newDevice.device_id" placeholder="如: WT005" /></el-form-item>
         <el-form-item label="设备名称" required><el-input v-model="newDevice.name" placeholder="如: 5号风机" /></el-form-item>
@@ -177,6 +185,7 @@ async function addDevice() {
         <el-form-item label="型号"><el-input v-model="newDevice.model" placeholder="如: SUN2000" /></el-form-item>
         <el-form-item label="位置"><el-input v-model="newDevice.location" placeholder="如: B区-04" /></el-form-item>
       </el-form>
+      </div>
       <template #footer>
         <el-button @click="showAddDialog = false">取消</el-button>
         <el-button type="primary" @click="addDevice" :loading="adding">确认添加</el-button>
@@ -201,4 +210,10 @@ async function addDevice() {
   p { margin-top: 10px; font-size: 14px; }
 }
 h4 { color: var(--color-accent); margin-bottom: 12px; font-size: 14px; }
+
+.compact-80 {
+  transform: scale(0.8);
+  transform-origin: top left;
+  width: 125%;
+}
 </style>

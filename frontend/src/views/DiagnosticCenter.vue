@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useSSE } from '@/hooks/useSSE'
 import { feedbackApi } from '@/api'
 import http from '@/api'
+import { riskLabel } from '@/utils/labels'
 
 interface ChatMsg {
   role: 'user' | 'assistant' | 'system'
@@ -26,6 +27,10 @@ const showHistory = ref(false)
 const historyLoaded = ref(false)
 const loadingHistory = ref(false)
 const historySessions = ref<any[]>([])
+
+const showBenchmark = ref(false)
+const benchmarkResult = ref<any>(null)
+const benchmarkRunning = ref(false)
 
 // 诊断历史
 async function loadHistory() {
@@ -180,7 +185,7 @@ async function submitFeedback(rating: string) {
   const last = [...chatMessages.value].reverse().find(m => m.role === 'assistant' && m.taskId)
   if (!last?.taskId) return
   try {
-    await feedbackApi.submit(last.taskId, rating)
+    await feedbackApi.submit(last.taskId, rating as 'accurate' | 'partially_accurate' | 'inaccurate')
     feedbackGiven.value = true
     feedbackResult.value = rating === 'accurate' ? '✅ 感谢反馈！案例已入库' : '📝 感谢反馈，已记录'
   } catch { feedbackResult.value = '反馈提交失败' }
@@ -210,6 +215,22 @@ const q = route.query.q as string
 if (q) { inputText.value = q; setTimeout(send, 500) }
 
 onMounted(() => { loadHistory() })
+
+async function runBenchmark() {
+  benchmarkRunning.value = true
+  try {
+    const res = await http.post('/api/benchmark/run', { limit: 5 })
+    benchmarkResult.value = res.data?.data || res.data
+  } catch {}
+  benchmarkRunning.value = false
+}
+async function loadBenchmarkResult() {
+  try {
+    const res = await http.get('/api/benchmark/result')
+    benchmarkResult.value = res.data?.data || res.data
+  } catch {}
+}
+function hitLabel(h: string) { return { exact: '精确', partial: '部分', miss: '未命中' }[h] || h }
 </script>
 
 <template>
@@ -224,6 +245,9 @@ onMounted(() => { loadHistory() })
           </el-button>
           <el-button size="small" text @click="showUploadPanel = !showUploadPanel" :type="showUploadPanel ? 'primary' : 'default'">
             <el-icon><component is="Upload" /></el-icon> 多模态
+          </el-button>
+          <el-button size="small" text @click="showBenchmark = !showBenchmark; if(showBenchmark) loadBenchmarkResult()" :type="showBenchmark ? 'primary' : 'default'">
+            <el-icon><component is="TrendCharts" /></el-icon> 评测
           </el-button>
           <el-button size="small" text @click="clearChat" :disabled="!chatMessages.length">
             <el-icon><component is="Delete" /></el-icon> 清空
@@ -286,6 +310,34 @@ onMounted(() => { loadHistory() })
         </div>
       </div>
 
+      <!-- 基准评测面板 -->
+      <div v-if="showBenchmark" class="benchmark-panel animate-slide-up">
+        <div class="bench-header">
+          <span>诊断准确率评测</span>
+          <el-button size="small" type="primary" :loading="benchmarkRunning" @click="runBenchmark">运行评测 (5例)</el-button>
+        </div>
+        <div v-if="benchmarkResult?.summary" class="bench-summary">
+          <span class="bs-item">精确匹配: <b>{{ (benchmarkResult.summary.accuracy * 100).toFixed(0) }}%</b></span>
+          <span class="bs-item">综合命中: <b>{{ (benchmarkResult.summary.combined_hit_rate * 100).toFixed(0) }}%</b></span>
+          <span class="bs-item">总案例: <b>{{ benchmarkResult.summary.total }}</b></span>
+          <span class="bs-item">平均延迟: <b>{{ benchmarkResult.summary.avg_latency_ms }}ms</b></span>
+        </div>
+        <div v-if="benchmarkResult?.details" class="bench-table">
+          <table>
+            <thead><tr><th>ID</th><th>设备</th><th>期望</th><th>预测</th><th>匹配</th></tr></thead>
+            <tbody>
+              <tr v-for="d in benchmarkResult.details" :key="d.id">
+                <td class="bid">{{ d.id }}</td><td>{{ d.device }}</td>
+                <td class="cause">{{ d.expected?.slice(0, 50) }}</td>
+                <td class="cause">{{ d.predicted?.slice(0, 50) || '-' }}</td>
+                <td><span class="tag" :class="d.hit">{{ hitLabel(d.hit) }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="!benchmarkResult?.summary && !benchmarkRunning" class="bench-empty">点击"运行评测"开始诊断准确率测试</div>
+      </div>
+
       <!-- 聊天消息区 -->
       <div class="chat-messages" ref="chatContainer" @scroll.passive>
         <div v-if="!chatMessages.length && !isStreaming" class="welcome-state">
@@ -340,7 +392,7 @@ onMounted(() => { loadHistory() })
                       <el-tag v-if="msg.report?.risk_level"
                         :type="msg.report.risk_level === 'CRITICAL' ? 'danger' : msg.report.risk_level === 'HIGH' ? 'warning' : 'info'"
                         effect="dark" size="small">
-                        {{ msg.report.risk_level }}
+                        {{ riskLabel(msg.report.risk_level) }}
                       </el-tag>
                       <span v-if="msg.report?.confidence" class="rc-confidence font-digital"
                         :style="{ color: (msg.report.confidence || 0) > 0.85 ? '#52c41a' : (msg.report.confidence || 0) > 0.7 ? '#ff9c40' : '#ff4d4f' }">
@@ -587,4 +639,21 @@ function copyReport(msg: any) {
 }
 .audio-list { margin-top: 6px; }
 .audio-item { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(0,240,255,0.03); border-radius: 4px; font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; }
+
+.benchmark-panel { background: rgba(10,22,40,0.9); border: 1px solid rgba(0,240,255,0.1); border-radius: 8px; padding: 14px; margin-top: 10px; }
+.bench-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: var(--color-accent); font-size: 13px; }
+.bench-summary { display: flex; gap: 16px; margin-bottom: 10px; }
+.bs-item { font-size: 12px; color: var(--color-text-secondary); }
+.bs-item b { color: var(--color-accent); }
+.bench-table { max-height: 200px; overflow-y: auto; }
+.bench-table table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.bench-table th, .bench-table td { padding: 4px 8px; border-bottom: 1px solid rgba(0,240,255,0.06); text-align: left; }
+.bench-table th { color: var(--color-accent); font-size: 10px; }
+.bid { font-family: monospace; color: var(--color-accent); }
+.cause { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag { padding: 1px 6px; border-radius: 3px; font-size: 10px; }
+.tag.exact { background: rgba(82,196,26,0.2); color: #52c41a; }
+.tag.partial { background: rgba(255,156,64,0.2); color: #ff9c40; }
+.tag.miss { background: rgba(255,77,79,0.2); color: #ff4d4f; }
+.bench-empty { text-align: center; font-size: 12px; color: var(--color-text-secondary); padding: 10px; }
 </style>

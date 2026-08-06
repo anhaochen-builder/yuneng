@@ -13,7 +13,7 @@ from app.models.schemas import (
     DashboardResponse, DashboardProgress, DashboardPhase,
     DashboardFileStats,
 )
-from app.utils.cache import ttl_cache
+from app.utils.cache import cached as ttl_cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])

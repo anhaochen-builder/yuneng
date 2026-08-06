@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useAlarmStore } from '@/stores/alarm'
 import { useRouter } from 'vue-router'
+import { riskLabel } from '@/utils/labels'
 
 const alarmStore = useAlarmStore()
 const router = useRouter()
@@ -12,7 +13,7 @@ function goAlarms() { router.push('/alarms') }
   <div v-if="alarmStore.alarms.filter(a => !a.read).length" class="alarm-overlay">
     <div v-for="a in alarmStore.alarms.filter(a => !a.read).slice(0, 3)" :key="a.id" class="alarm-toast" :class="a.risk_level || a.levelDisplay">
       <div class="toast-header">
-        <el-tag size="small" :type="(a.risk_level || a.levelDisplay) === 'critical' ? 'danger' : 'warning'">{{ a.risk_level || a.levelDisplay }}</el-tag>
+        <el-tag size="small" :type="(a.risk_level || a.levelDisplay) === 'critical' ? 'danger' : 'warning'">{{ riskLabel(a.risk_level || a.levelDisplay || '') }}</el-tag>
         <span class="toast-device">{{ a.device_id }}</span>
         <el-button size="small" text @click="alarmStore.markAsRead(a.id); goAlarms()">查看</el-button>
         <el-button size="small" text @click="alarmStore.markAsRead(a.id)">✕</el-button>

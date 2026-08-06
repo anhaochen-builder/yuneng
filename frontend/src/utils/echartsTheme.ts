@@ -1,3 +1,4 @@
+import type { LineSeriesOption, RadarSeriesOption } from 'echarts/charts'
 import * as echarts from 'echarts'
 
 const techBlueTheme = {
@@ -8,8 +9,8 @@ const techBlueTheme = {
   tooltip: { backgroundColor: 'rgba(4, 32, 79, 0.95)', borderColor: '#2FA7D1', textStyle: { color: '#E8ECF1' } },
   legend: { textStyle: { color: '#8EA8C8' }, inactiveColor: '#3A5070' },
   grid: { left: '10%', right: '10%', top: '15%', bottom: '10%', containLabel: true },
-  xAxis: { axisLine: { lineStyle: { color: 'rgba(255,255,255,0.10)' } }, axisTick: { show: false }, axisLabel: { color: '#8EA8C8' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' as any } } },
-  yAxis: { axisLine: { lineStyle: { color: 'rgba(255,255,255,0.10)' } }, axisTick: { show: false }, axisLabel: { color: '#8EA8C8' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' as any } } },
+  xAxis: { axisLine: { lineStyle: { color: 'rgba(255,255,255,0.10)' } }, axisTick: { show: false }, axisLabel: { color: '#8EA8C8' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' as const } } },
+  yAxis: { axisLine: { lineStyle: { color: 'rgba(255,255,255,0.10)' } }, axisTick: { show: false }, axisLabel: { color: '#8EA8C8' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' as const } } },
 }
 
 echarts.registerTheme('techBlue', techBlueTheme)
@@ -24,10 +25,14 @@ export const scadaDualAxisOption = {
     { type: 'value' as const, name: '温度/风速', axisLabel: { color: '#8EA8C8' } },
   ],
   series: [
-    { name: '有功功率(kW)', type: 'line', yAxisIndex: 0, smooth: true, symbol: 'none', lineStyle: { color: '#2FA7D1', width: 2 }, areaStyle: { color: { type: 'linear' as any, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(47,167,209,0.3)' }, { offset: 1, color: 'rgba(47,167,209,0)' }] } } },
-    { name: '电流(A)', type: 'line', yAxisIndex: 0, smooth: true, symbol: 'none', lineStyle: { color: '#40C9A0', width: 2 } },
-    { name: '温度(°C)', type: 'line', yAxisIndex: 1, smooth: true, symbol: 'none', lineStyle: { color: '#F0A040', width: 2 } },
-    { name: '风速(m/s)', type: 'line', yAxisIndex: 1, smooth: true, symbol: 'none', lineStyle: { color: '#8B80F0', width: 2 } },
+    {
+      type: 'line', name: '有功功率(kW)', yAxisIndex: 0, smooth: true, symbol: 'none',
+      lineStyle: { color: '#2FA7D1', width: 2 },
+      areaStyle: { color: { type: 'linear' as const, x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(47,167,209,0.3)' }, { offset: 1, color: 'rgba(47,167,209,0)' }] } },
+    } satisfies LineSeriesOption,
+    { type: 'line', name: '电流(A)', yAxisIndex: 0, smooth: true, symbol: 'none', lineStyle: { color: '#40C9A0', width: 2 } } satisfies LineSeriesOption,
+    { type: 'line', name: '温度(°C)', yAxisIndex: 1, smooth: true, symbol: 'none', lineStyle: { color: '#F0A040', width: 2 } } satisfies LineSeriesOption,
+    { type: 'line', name: '风速(m/s)', yAxisIndex: 1, smooth: true, symbol: 'none', lineStyle: { color: '#8B80F0', width: 2 } } satisfies LineSeriesOption,
   ],
 }
 
@@ -41,7 +46,7 @@ export const judgeRadarOption = {
       { name: '可操作性\n(20%)', max: 100 },
       { name: '历史一致性\n(10%)', max: 100 },
     ],
-    shape: 'polygon' as any,
+    shape: 'polygon' as const,
     radius: '65%',
     axisName: { color: '#8EA8C8', fontSize: 11 },
     splitArea: { areaStyle: { color: ['rgba(47,167,209,0.02)', 'rgba(47,167,209,0.06)'] } },
@@ -57,5 +62,5 @@ export const judgeRadarOption = {
       lineStyle: { color: '#2FA7D1', width: 2 },
       itemStyle: { color: '#2FA7D1' },
     }],
-  }],
+  }] satisfies RadarSeriesOption[],
 }

@@ -38,6 +38,9 @@ const navItems = [
   { path: '/reports',   icon: 'Document',        label: '报表管理' },
   { path: '/knowledge', icon: 'Collection',      label: '知识库' },
   { path: '/devices',   icon: 'Cpu',             label: '设备管理' },
+  { path: '/workorders',icon: 'Tickets',         label: '智能工单' },
+  { path: '/automation',icon: 'Connection',      label: '自动化集成' },
+  { path: '/shift',     icon: 'Notebook',         label: '交接班' },
   { path: '/settings',  icon: 'Setting',         label: '系统设置' },
 ]
 
@@ -59,23 +62,52 @@ onMounted(() => requestAnimationFrame(clockTicker))
   <div class="app-shell">
     <div class="effect-bg"></div>
 
-    <!-- 湖面电流特效 (全局背景层底部) -->
+    <!-- 湖面电流特效 -->
     <svg class="lake-current" viewBox="0 0 1440 300" preserveAspectRatio="none">
       <defs>
-        <filter id="lakeGlow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-        <linearGradient id="lakeArc1" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="rgba(47,167,209,0)"/><stop offset="30%" stop-color="rgba(47,167,209,0.9)"/><stop offset="50%" stop-color="rgba(100,220,255,1)"/><stop offset="70%" stop-color="rgba(47,167,209,0.9)"/><stop offset="100%" stop-color="rgba(47,167,209,0)"/>
+        <filter id="glowS"><feGaussianBlur stdDeviation="1.5"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="glowM"><feGaussianBlur stdDeviation="3"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="glowL"><feGaussianBlur stdDeviation="6"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <linearGradient id="arcCyan" x1="0%" x2="100%">
+          <stop offset="0%" stop-color="rgba(47,167,209,0)"/><stop offset="25%" stop-color="rgba(47,167,209,0.7)"/><stop offset="50%" stop-color="rgba(100,220,255,1)"/><stop offset="75%" stop-color="rgba(47,167,209,0.7)"/><stop offset="100%" stop-color="rgba(47,167,209,0)"/>
         </linearGradient>
-        <linearGradient id="lakeArc2" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="rgba(64,224,208,0)"/><stop offset="35%" stop-color="rgba(64,224,208,0.8)"/><stop offset="50%" stop-color="rgba(160,255,240,0.9)"/><stop offset="65%" stop-color="rgba(64,224,208,0.8)"/><stop offset="100%" stop-color="rgba(64,224,208,0)"/>
+        <linearGradient id="arcTeal" x1="0%" x2="100%">
+          <stop offset="0%" stop-color="rgba(64,224,208,0)"/><stop offset="30%" stop-color="rgba(64,224,208,0.6)"/><stop offset="50%" stop-color="rgba(140,255,235,0.9)"/><stop offset="70%" stop-color="rgba(64,224,208,0.6)"/><stop offset="100%" stop-color="rgba(64,224,208,0)"/>
         </linearGradient>
+        <linearGradient id="arcBlue" x1="0%" x2="100%">
+          <stop offset="0%" stop-color="rgba(100,140,255,0)"/><stop offset="35%" stop-color="rgba(100,140,255,0.5)"/><stop offset="50%" stop-color="rgba(160,190,255,0.8)"/><stop offset="65%" stop-color="rgba(100,140,255,0.5)"/><stop offset="100%" stop-color="rgba(100,140,255,0)"/>
+        </linearGradient>
+        <radialGradient id="sparkGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="rgba(150,230,255,1)"/><stop offset="40%" stop-color="rgba(47,167,209,0.6)"/><stop offset="100%" stop-color="rgba(47,167,209,0)"/>
+        </radialGradient>
       </defs>
-      <path d="M0,250 Q200,180 400,210 Q600,240 800,200 Q1000,160 1200,190 Q1350,210 1440,180" stroke="url(#lakeArc1)" stroke-width="2" fill="none" stroke-dasharray="16 24" class="larc l1" filter="url(#lakeGlow)"/>
-      <path d="M0,230 Q250,150 500,190 Q750,230 1000,180 Q1200,140 1440,200" stroke="url(#lakeArc2)" stroke-width="1.5" fill="none" stroke-dasharray="24 32" class="larc l2" filter="url(#lakeGlow)"/>
-      <path d="M100,270 Q350,200 600,240 Q850,280 1100,230 Q1300,200 1440,250" stroke="url(#lakeArc1)" stroke-width="2.2" fill="none" stroke-dasharray="12 20" class="larc l3" filter="url(#lakeGlow)"/>
-      <circle cx="350" cy="215" r="3" fill="rgba(100,220,255,0.8)" class="lspark lsp1" filter="url(#lakeGlow)"/>
-      <circle cx="800" cy="195" r="2.5" fill="rgba(64,224,208,0.8)" class="lspark lsp2" filter="url(#lakeGlow)"/>
-      <circle cx="1100" cy="225" r="2" fill="rgba(100,220,255,0.7)" class="lspark lsp3" filter="url(#lakeGlow)"/>
+
+      <!-- 电流弧线 -->
+      <path d="M-50,260 Q180,160 400,200 Q620,240 800,190 Q980,140 1200,180 Q1350,195 1500,170" stroke="url(#arcCyan)" stroke-width="2.5" fill="none" stroke-dasharray="14 22" class="arc a1" filter="url(#glowM)"/>
+      <path d="M-50,220 Q200,120 480,180 Q700,220 960,165 Q1150,130 1400,185 Q1450,195 1500,200" stroke="url(#arcTeal)" stroke-width="2" fill="none" stroke-dasharray="20 28" class="arc a2" filter="url(#glowM)"/>
+      <path d="M-50,240 Q220,180 440,210 Q660,240 880,195 Q1080,150 1300,190 Q1410,210 1500,200" stroke="url(#arcCyan)" stroke-width="1.8" fill="none" stroke-dasharray="10 18" class="arc a3" filter="url(#glowS)"/>
+      <path d="M-50,200 Q250,80 520,165 Q750,210 1000,155 Q1180,110 1440,175" stroke="url(#arcBlue)" stroke-width="1.5" fill="none" stroke-dasharray="18 30" class="arc a4" filter="url(#glowS)"/>
+      <path d="M-50,280 Q180,200 380,230 Q600,260 820,215 Q1020,170 1220,210 Q1370,230 1500,220" stroke="url(#arcTeal)" stroke-width="1.2" fill="none" stroke-dasharray="8 16" class="arc a5" filter="url(#glowS)"/>
+      <path d="M-50,180 Q300,60 560,150 Q800,200 1050,140 Q1250,90 1500,165" stroke="url(#arcBlue)" stroke-width="1" fill="none" stroke-dasharray="22 35" class="arc a6" filter="url(#glowS)"/>
+
+      <!-- 光点粒子 -->
+      <circle cx="280" cy="200" r="4" fill="url(#sparkGlow)" class="spark s1" filter="url(#glowS)"/>
+      <circle cx="520" cy="190" r="3" fill="url(#sparkGlow)" class="spark s2" filter="url(#glowS)"/>
+      <circle cx="730" cy="175" r="5" fill="url(#sparkGlow)" class="spark s3" filter="url(#glowS)"/>
+      <circle cx="960" cy="185" r="3.5" fill="url(#sparkGlow)" class="spark s4" filter="url(#glowS)"/>
+      <circle cx="1150" cy="195" r="4.5" fill="url(#sparkGlow)" class="spark s5" filter="url(#glowS)"/>
+      <circle cx="380" cy="230" r="2.5" fill="url(#sparkGlow)" class="spark s6" filter="url(#glowS)"/>
+      <circle cx="650" cy="210" r="3" fill="url(#sparkGlow)" class="spark s7" filter="url(#glowS)"/>
+      <circle cx="850" cy="200" r="2" fill="url(#sparkGlow)" class="spark s8" filter="url(#glowS)"/>
+      <circle cx="1080" cy="180" r="3.5" fill="url(#sparkGlow)" class="spark s9" filter="url(#glowS)"/>
+      <circle cx="1350" cy="190" r="2.5" fill="url(#sparkGlow)" class="spark s10" filter="url(#glowS)"/>
+
+      <!-- 竖线脉冲 -->
+      <line x1="200" y1="285" x2="200" y2="210" stroke="rgba(47,167,209,0.15)" stroke-width="1" class="pulse p1" filter="url(#glowS)"/>
+      <line x1="500" y1="280" x2="500" y2="200" stroke="rgba(47,167,209,0.12)" stroke-width="1" class="pulse p2" filter="url(#glowS)"/>
+      <line x1="800" y1="275" x2="800" y2="190" stroke="rgba(64,224,208,0.12)" stroke-width="1" class="pulse p3" filter="url(#glowS)"/>
+      <line x1="1100" y1="282" x2="1100" y2="195" stroke="rgba(47,167,209,0.15)" stroke-width="1" class="pulse p4" filter="url(#glowS)"/>
+      <line x1="1350" y1="280" x2="1350" y2="205" stroke="rgba(64,224,208,0.1)" stroke-width="1" class="pulse p5" filter="url(#glowS)"/>
     </svg>
 
     <AlarmAlertOverlay />
@@ -157,6 +189,9 @@ onMounted(() => requestAnimationFrame(clockTicker))
         </div>
       </div>
     </footer>
+    <div class="disclaimer-bar">
+      ⚠️ 本系统诊断结果为 AI 辅助分析，仅供参考。任何涉及设备停运、并网解列的操作决策，必须经值长或专工人工确认后执行。
+    </div>
   </div>
 </template>
 
@@ -168,38 +203,64 @@ onMounted(() => requestAnimationFrame(clockTicker))
 
 .effect-bg {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
-  background-image: url('/effect-bg.jpg');
+  background-image: url('/effect-bg.png');
   background-size: cover; background-position: center; background-repeat: no-repeat;
 }
 
 // ── 湖面电流特效 (底部30%) ──
 .lake-current {
-  position: fixed; bottom: 8%; left: 0; width: 100%; height: 30%;
-  z-index: 0; pointer-events: none; opacity: 0.7;
+  position: fixed; bottom: 6%; left: 0; width: 100%; height: 28%;
+  z-index: 0; pointer-events: none; opacity: 0.85;
 }
-.larc {
-  animation: currentDrift 5s linear infinite;
-  &.l1 { animation-duration: 5s; }
-  &.l2 { animation-duration: 6.5s; animation-delay: 1.5s; }
-  &.l3 { animation-duration: 4s; animation-delay: 0.8s; }
-}
+
+.arc { animation: currentDrift 4s linear infinite; }
+.a1 { animation-duration: 4s; }
+.a2 { animation-duration: 5.5s; animation-delay: 0.8s; }
+.a3 { animation-duration: 3.5s; animation-delay: 1.5s; }
+.a4 { animation-duration: 6s; animation-delay: 0.3s; }
+.a5 { animation-duration: 3s; animation-delay: 2s; }
+.a6 { animation-duration: 7s; animation-delay: 1s; }
+
 @keyframes currentDrift {
-  0% { stroke-dashoffset: 0; opacity: 0.3; }
-  40% { opacity: 1; }
-  70% { opacity: 0.8; }
-  100% { stroke-dashoffset: -80; opacity: 0.3; }
+  0% { stroke-dashoffset: 0; opacity: 0.2; }
+  25% { opacity: 1; }
+  50% { opacity: 0.6; }
+  75% { opacity: 0.9; }
+  100% { stroke-dashoffset: -100; opacity: 0.2; }
 }
-.lspark {
-  animation: lakeSpark 3s ease-in-out infinite;
-  &.lsp1 { animation-delay: 0s; }
-  &.lsp2 { animation-delay: 1.5s; }
-  &.lsp3 { animation-delay: 2.2s; }
+
+.spark { animation: sparkFloat 3s ease-in-out infinite; }
+.s1 { animation-delay: 0s; animation-duration: 2.8s; }
+.s2 { animation-delay: 0.4s; animation-duration: 3.2s; }
+.s3 { animation-delay: 0.8s; animation-duration: 2.5s; }
+.s4 { animation-delay: 1.2s; animation-duration: 3.5s; }
+.s5 { animation-delay: 1.6s; animation-duration: 2.7s; }
+.s6 { animation-delay: 0.2s; animation-duration: 3.8s; }
+.s7 { animation-delay: 0.7s; animation-duration: 2.9s; }
+.s8 { animation-delay: 1.0s; animation-duration: 3.1s; }
+.s9 { animation-delay: 1.5s; animation-duration: 2.6s; }
+.s10 { animation-delay: 1.9s; animation-duration: 3.4s; }
+
+@keyframes sparkFloat {
+  0%, 100% { opacity: 0.1; transform: scale(0.3) translateY(0); }
+  20% { opacity: 1; transform: scale(1.4) translateY(-8px); }
+  40% { opacity: 0.6; transform: scale(0.8) translateY(-4px); }
+  60% { opacity: 0.9; transform: scale(1.2) translateY(-10px); }
+  80% { opacity: 0.3; transform: scale(0.6) translateY(-2px); }
 }
-@keyframes lakeSpark {
-  0%,100% { opacity: 0.1; transform: scale(0.5); }
-  25% { opacity: 1; transform: scale(1.5); }
-  50% { opacity: 0.3; transform: scale(0.8); }
-  75% { opacity: 0.9; transform: scale(1.3); }
+
+.pulse { animation: pulseLine 4s ease-in-out infinite; }
+.p1 { animation-delay: 0s; }
+.p2 { animation-delay: 1s; }
+.p3 { animation-delay: 2s; }
+.p4 { animation-delay: 0.5s; }
+.p5 { animation-delay: 1.5s; }
+
+@keyframes pulseLine {
+  0%, 100% { opacity: 0.05; }
+  25% { opacity: 0.5; }
+  50% { opacity: 0.15; }
+  75% { opacity: 0.4; }
 }
 
 // ── 顶部栏 ──
@@ -355,6 +416,14 @@ onMounted(() => requestAnimationFrame(clockTicker))
 }
 .settings-btn:hover { transform: rotate(30deg); }
 .logout-btn:hover { color: #E85555 !important; border-color: rgba(232,85,85,0.35) !important; }
+
+.disclaimer-bar {
+  flex-shrink: 0; z-index: 100;
+  text-align: center; padding: 4px 16px;
+  font-size: 12px; color: rgba(232,136,85,0.8);
+  background: rgba(232,85,85,0.06);
+  border-top: 1px solid rgba(232,85,85,0.12);
+}
 
 // ── 主内容区 ──
 .main-content { flex: 1; overflow: hidden; position: relative; z-index: 2; }

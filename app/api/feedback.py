@@ -52,6 +52,12 @@ async def submit_feedback(req: FeedbackRequest):
         f"operator={req.operator}"
     )
 
+    try:
+        from scripts.rlhf_pipeline import record_feedback
+        record_feedback(record)
+    except Exception as e:
+        logger.debug(f"RLHF 记录失败: {e}")
+
     if req.rating == "accurate":
         _handle_accurate(req.task_id, record)
     elif req.rating == "partially_accurate":

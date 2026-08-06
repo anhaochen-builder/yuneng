@@ -1,0 +1,22 @@
+{
+  "WO-20260806-C65AE49A": {
+    "order_id": "WO-20260806-C65AE49A",
+    "task_id": "Q001",
+    "device_id": "INV001",
+    "device_name": "",
+    "title": "测试工单",
+    "description": "测试",
+    "root_cause": "",
+    "investigation_steps": [],
+    "recommendations": [],
+    "safety_notes": [],
+    "level": "high",
+    "status": "pending",
+    "assignee": "",
+    "created_at": "2026-08-06T18:05:57.245406",
+    "updated_at": "2026-08-06T18:05:57.245423",
+    "closed_at": null,
+    "maintenance_notes": "",
+    "maintenance_images": []
+  }
+}

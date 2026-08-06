@@ -1,9 +1,16 @@
 import axios from 'axios'
 import { autoMask } from '@/utils/mask'
+import type { AlarmReceivePayload, ScadaConnectConfig, FeedbackPayload } from '@/types'
 
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 120000,
+})
+
+http.interceptors.request.use((config) => {
+  const token = localStorage.getItem('yuneng_token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
 })
 
 http.interceptors.response.use(
@@ -58,7 +65,7 @@ export const diagnoseApi = {
 
 export const alarmApi = {
   health: () => http.get('/api/alarm/health'),
-  receive: (payload: Record<string, any>) => http.post('/api/alarm/receive', payload),
+  receive: (payload: AlarmReceivePayload) => http.post('/api/alarm/receive', payload),
   diagnose: (alarmDescription: string, taskId?: string) =>
     http.post('/api/alarm/diagnose', { alarmDescription, taskId }),
   status: (taskId: string) => http.get(`/api/alarm/diagnose/${taskId}/status`),
@@ -77,7 +84,7 @@ export const knowledgeApi = {
 
 export const scadaApi = {
   health: () => http.get('/api/scada/health'),
-  connect: (config: Record<string, any>) => http.post('/api/scada/connect', config),
+  connect: (config: ScadaConnectConfig) => http.post('/api/scada/connect', config),
   disconnect: (deviceId: string) => http.post(`/api/scada/disconnect/${deviceId}`),
   data: (deviceId: string) => http.get(`/api/scada/data/${deviceId}`),
   window: (deviceId: string) => http.get(`/api/scada/data/${deviceId}/window`),
@@ -86,7 +93,7 @@ export const scadaApi = {
 }
 
 export const feedbackApi = {
-  submit: (taskId: string, rating: string, comment?: string, correctedRootCause?: string) =>
+  submit: (taskId: string, rating: FeedbackPayload['rating'], comment?: string, correctedRootCause?: string) =>
     http.post('/api/feedback', { task_id: taskId, rating, comment, corrected_root_cause: correctedRootCause }),
   stats: () => http.get('/api/feedback/stats'),
 }

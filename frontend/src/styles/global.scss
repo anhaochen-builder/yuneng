@@ -6,10 +6,25 @@ html, body {
   background: transparent;
   color: var(--color-text-primary);
   font-family: var(--font-body);
+  font-size: 22px;
+  line-height: 1.7;
+  font-weight: 400;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: 0.02em;
 }
+
+.el-button { font-size: 18px !important; }
+.el-tag { font-size: 16px !important; }
+.el-input__inner { font-size: 18px !important; }
+.el-select .el-input__inner { font-size: 18px !important; }
+.el-dialog__title { font-size: 22px !important; }
+.el-dialog__body { font-size: 18px !important; }
+.el-message { font-size: 18px !important; }
+.el-progress__text { font-size: 16px !important; }
+.el-badge__content { font-size: 14px !important; }
 
 // ── Element Plus 主题 ──
 :root {
@@ -21,9 +36,10 @@ html, body {
   --el-border-radius-base: 6px;
   --el-fill-color-blank: rgba(4,32,79,0.45);
   --el-bg-color: rgba(4,32,79,0.35);
-  --el-text-color-primary: #E8ECF1;
-  --el-text-color-regular: #8EA8C8;
-  --el-text-color-placeholder: rgba(142,168,200,0.45);
+  --el-text-color-primary: #F5F8FC;
+  --el-text-color-regular: #CCDCE8;
+  --el-text-color-placeholder: rgba(204,220,232,0.55);
+  --el-text-color-secondary: #CCDCE8;
 }
 
 .el-button--primary {
@@ -46,7 +62,16 @@ html, body {
 }
 .el-table th.el-table__cell {
   background-color: rgba(48, 167, 209, 0.08);
-  font-size: 12px; font-weight: 600;
+  font-size: 20px; font-weight: 700;
+}
+.el-table td.el-table__cell {
+  font-size: 18px;
+}
+.el-table--striped .el-table__body tr.el-table__row--striped td {
+  background: rgba(48, 167, 209, 0.04) !important;
+}
+.el-table__body tr:hover > td {
+  background: rgba(48, 167, 209, 0.08) !important;
 }
 
 .el-input__wrapper {
@@ -86,15 +111,15 @@ html, body {
   &:hover::before, &:hover::after { opacity: 0.7; }
 }
 .panel-title {
-  font-size: 14px; font-weight: bold; color: var(--color-accent);
-  margin-bottom: 10px; display: flex; align-items: center;
+  font-size: 22px; font-weight: 700; color: var(--color-accent);
+  margin-bottom: 16px; display: flex; align-items: center;
   &::before {
     content: ''; display: inline-block; width: 4px; height: 16px;
     background: var(--color-accent); margin-right: 8px; border-radius: 2px;
     box-shadow: 0 0 8px var(--color-accent);
   }
 }
-.panel-unit { font-size: 12px; color: var(--color-text-secondary); margin-left: auto; font-weight: 400; }
+.panel-ttl { font-size: 13px; color: var(--color-text-secondary); margin-left: auto; font-weight: 500; }
 
 .tech-card {
   background: var(--color-panel-bg);
@@ -104,6 +129,7 @@ html, body {
   position: relative;
   backdrop-filter: blur(10px);
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25);
+  font-size: 20px;
   &::before, &::after {
     content: ''; position: absolute;
     width: 10px; height: 10px;
@@ -136,3 +162,24 @@ html, body {
 .data-glow { text-shadow: 0 0 8px rgba(48, 167, 209, 0.45), 0 0 20px rgba(48, 167, 209, 0.18); }
 
 ::selection { background: rgba(48, 167, 209, 0.28); color: #fff; }
+
+.el-descriptions__label,
+.el-form-item__label,
+.el-table-column,
+.rd-label, .dgk, .ik, .ss-lbl, .sc-lbl,
+.fb-lbl, .s-detail, .nf-hint, .preset-label,
+.bar-label, .bs-item, .metric-label, .dr-note,
+.model-date, .model-samples, .rlhf-empty, .empty-note,
+.filter-count, .wh-row, .llm-row label {
+  font-size: 20px !important;
+  font-weight: 500 !important;
+}
+
+.main-content, .settings-page, .report-page, .diagnostic-page, .alarm-page,
+.workorder-page, .benchmark-page, .rlhf-page, .monitor-page, .knowledge-page,
+.device-page, .scada-page {
+  font-size: 22px;
+  p, span, div, label, a, li, td, th, input, select, textarea, button {
+    font-size: inherit;
+  }
+}

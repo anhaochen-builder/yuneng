@@ -86,6 +86,9 @@ async def diagnose(req: DiagnosisRequest):
     )
 
     memory.save_to_session(session_id, symptoms, analysis_text)
+
+    _trigger_work_order(task_id, req.device_id or "", diag_data, analysis_text)
+
     return response
 
 
@@ -299,6 +302,9 @@ async def diagnose_multimodal(req: MultimodalRequest):
     )
 
     memory.save_to_session(session_id, symptoms, result.get(K.EXECUTION_RESULT, ""))
+
+    _trigger_work_order(task_id, req.device_id or "", diag_data, result.get(K.EXECUTION_RESULT, ""))
+
     return response
 
 
@@ -446,3 +452,21 @@ async def get_report(task_id: str):
         if tid == task_id:
             return {"task_id": task_id, "report": data.get("diagnosis_text", ""), "found": True}
     return {"task_id": task_id, "report": "", "found": False}
+
+
+def _trigger_work_order(task_id: str, device_id: str, diag_data: dict, report: str):
+    if not device_id:
+        return
+    risk_level = diag_data.get("risk_level", "MEDIUM") if isinstance(diag_data, dict) else "MEDIUM"
+    if risk_level not in ("CRITICAL", "HIGH"):
+        return
+    try:
+        from app.api.workorder import auto_create_work_order
+        root_causes = diag_data.get("root_causes", []) if isinstance(diag_data, dict) else []
+        root_cause = root_causes[0].get("cause", "") if root_causes else diag_data.get("root_cause", "")
+        auto_create_work_order(
+            task_id=task_id, device_id=device_id, device_name=device_id,
+            report=report, root_cause=root_cause, risk_level=risk_level,
+        )
+    except Exception as e:
+        logger.warning(f"自动创建工单失败: {e}")

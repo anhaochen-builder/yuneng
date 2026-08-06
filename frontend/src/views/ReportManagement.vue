@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { diagnoseApi } from '@/api'
+import { riskLabel } from '@/utils/labels'
 
 interface ReportItem {
   task_id: string; device_id: string; device_name: string; device_type: string
@@ -98,9 +99,9 @@ loadReports()
     <div class="stats-bar">
       <div class="stat-chip" v-for="s in [
         { label:'报告总数', value:stats.total, color:'var(--color-accent)' },
-        { label:'CRITICAL', value:stats.critical, color:'#ff4d4f' },
-        { label:'HIGH', value:stats.high, color:'#ff9c40' },
-        { label:'MEDIUM', value:stats.medium, color:'var(--color-accent)' },
+        { label:'危急', value:stats.critical, color:'#ff4d4f' },
+        { label:'高', value:stats.high, color:'#ff9c40' },
+        { label:'中', value:stats.medium, color:'var(--color-accent)' },
         { label:'平均置信度', value:stats.avgConfidence + '%', color:'#52c41a' },
       ]" :key="s.label">
         <span class="sc-val font-digital" :style="{color:s.color}">{{ s.value }}</span>
@@ -116,9 +117,9 @@ loadReports()
       <el-input v-model="searchText" placeholder="搜索任务ID / 设备 / 故障描述..." size="small" clearable style="width:300px" />
       <el-select v-model="filterRisk" size="small" style="width:120px" placeholder="风险等级">
         <el-option label="全部等级" value="all" />
-        <el-option label="CRITICAL" value="CRITICAL" />
-        <el-option label="HIGH" value="HIGH" />
-        <el-option label="MEDIUM" value="MEDIUM" />
+        <el-option label="危急" value="CRITICAL" />
+        <el-option label="高" value="HIGH" />
+        <el-option label="中" value="MEDIUM" />
       </el-select>
       <el-select v-model="filterDevice" size="small" style="width:140px" placeholder="设备类型" clearable>
         <el-option v-for="t in deviceTypes" :key="t" :label="t" :value="t" />
@@ -136,7 +137,7 @@ loadReports()
         <el-table-column prop="device_type" label="类型" width="100" />
         <el-table-column prop="symptoms" label="故障描述" min-width="200" show-overflow-tooltip />
         <el-table-column prop="risk_level" label="风险等级" width="100">
-          <template #default="{ row: r }"><el-tag size="small" :type="getRiskType(r.risk_level)">{{ r.risk_level }}</el-tag></template>
+          <template #default="{ row: r }"><el-tag size="small" :type="getRiskType(r.risk_level)">{{ riskLabel(r.risk_level) }}</el-tag></template>
         </el-table-column>
         <el-table-column prop="confidence" label="置信度" width="90">
           <template #default="{ row: r }"><span class="font-digital" :style="{color:getConfColor(r.confidence)}">{{ (r.confidence*100).toFixed(0) }}%</span></template>
@@ -155,7 +156,7 @@ loadReports()
       <div v-if="selectedReport" class="report-detail">
         <div class="rd-header">
           <span class="rd-id font-digital">{{ selectedReport.task_id }}</span>
-          <el-tag size="large" :type="getRiskType(selectedReport.risk_level)">{{ selectedReport.risk_level }}</el-tag>
+          <el-tag size="large" :type="getRiskType(selectedReport.risk_level)">{{ riskLabel(selectedReport.risk_level) }}</el-tag>
         </div>
         <div class="rd-grid">
           <div class="rd-item"><span class="rd-label">设备</span><span>{{ selectedReport.device_name }} ({{ selectedReport.device_id }})</span></div>
@@ -202,4 +203,13 @@ loadReports()
 .rd-section { margin-top: 4px; }
 .rd-section-title { font-size: 13px; color: var(--color-accent); margin-bottom: 6px; font-weight: 600; }
 .rd-section-body { font-size: 13px; color: var(--color-text-secondary); line-height: 1.7; padding: 10px; background: rgba(0,240,255,0.03); border-radius: 6px; }
+
+.report-table {
+  :deep(.el-table__body tr.el-table__row--striped td) {
+    background: rgba(48, 167, 209, 0.04) !important;
+  }
+  :deep(.el-table__body tr:hover > td) {
+    background: rgba(48, 167, 209, 0.1) !important;
+  }
+}
 </style>

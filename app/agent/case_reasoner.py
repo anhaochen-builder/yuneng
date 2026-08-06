@@ -66,13 +66,14 @@ class CaseBasedReasoner:
         try:
             from app.rag.graphrag import graphrag_service
             self._graphrag = graphrag_service
-        except Exception:
-            logger.warning("GraphRAG 不可用")
+        except Exception as e:
+            logger.warning(f"GraphRAG 不可用: {e}")
 
         try:
             from app.agent.llm_provider import OFFLINE_RULES
             self._rule_engine = OFFLINE_RULES
-        except Exception:
+        except Exception as e:
+            logger.warning(f"离线规则引擎加载失败: {e}")
             self._rule_engine = {}
 
         self._ready = all([self._hybrid_search, self._kg_service])
@@ -127,14 +128,14 @@ class CaseBasedReasoner:
         if self._kg_service:
             try:
                 entities.update(self._kg_service.extract_entities(text))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"知识图谱实体提取失败: {e}")
         if self._graphrag and not entities.get("device_type"):
             try:
                 ge = self._graphrag.extract_entities(text)
                 entities.update({k: v for k, v in ge.items() if v and v != "未知"})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"GraphRAG实体提取失败: {e}")
 
         if not entities.get("device_id"):
             match = re.search(r'[A-Z]+\d+', text)
@@ -169,8 +170,8 @@ class CaseBasedReasoner:
                     text = r.get("text", "")
                     if text and text not in [c["text"] for c in cases]:
                         cases.append({"text": text[:2000], "score": 0.7, "source": "knowledge_graph"})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"知识图谱检索失败: {e}")
 
         cases.sort(key=lambda c: c["score"], reverse=True)
         return cases[:8]
@@ -182,15 +183,15 @@ class CaseBasedReasoner:
                 ctx = self._kg_service.build_graph_context(query)
                 if ctx:
                     parts.append(ctx)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"知识图谱上下文构建失败: {e}")
         if self._graphrag:
             try:
                 ctx = self._graphrag.build_graph_context(query)
                 if ctx:
                     parts.append(ctx)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"GraphRAG上下文构建失败: {e}")
         return "\n\n".join(parts)
 
     def _match_rules(self, symptoms: str, entities: dict) -> dict | None:

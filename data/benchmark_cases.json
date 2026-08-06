@@ -1,0 +1,302 @@
+[
+  {
+    "id": "B001",
+    "device_type": "逆变器",
+    "device_id": "INV001",
+    "symptoms": "逆变器IGBT模块温度持续升高至98°C，超过保护阈值85°C，散热风扇转速正常，运行功率500kW",
+    "expected_root_cause": "IGBT模块过热",
+    "expected_category": "温度异常",
+    "risk_level": "HIGH",
+    "keywords": ["IGBT", "过热", "温度", "散热"]
+  },
+  {
+    "id": "B002",
+    "device_type": "逆变器",
+    "device_id": "INV003",
+    "symptoms": "逆变器通讯中断超过30分钟，SCADA显示离线状态，现场检查设备供电正常，通讯模块指示灯异常闪烁",
+    "expected_root_cause": "通讯模块故障",
+    "expected_category": "通讯故障",
+    "risk_level": "HIGH",
+    "keywords": ["通讯", "中断", "离线", "通讯模块"]
+  },
+  {
+    "id": "B003",
+    "device_type": "逆变器",
+    "device_id": "INV007",
+    "symptoms": "逆变器输出功率波动，直流侧电压稳定，交流侧三相电流不平衡度达到15%",
+    "expected_root_cause": "三相电流不平衡",
+    "expected_category": "电气异常",
+    "risk_level": "MEDIUM",
+    "keywords": ["功率波动", "三相不平衡", "电流"]
+  },
+  {
+    "id": "B004",
+    "device_type": "逆变器",
+    "device_id": "INV009",
+    "symptoms": "逆变器直流侧绝缘阻抗下降至50kΩ，低于100kΩ告警阈值，组件无明显破损",
+    "expected_root_cause": "绝缘阻抗降低",
+    "expected_category": "绝缘故障",
+    "risk_level": "HIGH",
+    "keywords": ["绝缘", "阻抗", "直流侧"]
+  },
+  {
+    "id": "B005",
+    "device_type": "逆变器",
+    "device_id": "INV012",
+    "symptoms": "逆变器交流侧过压保护动作，电网电压波动至460V，超过额定值10%",
+    "expected_root_cause": "交流过电压",
+    "expected_category": "过电压",
+    "risk_level": "HIGH",
+    "keywords": ["过压", "电压", "保护"]
+  },
+  {
+    "id": "B006",
+    "device_type": "风机",
+    "device_id": "WT001",
+    "symptoms": "风机齿轮箱振动幅值超标，频谱分析显示啮合频率附近出现边频带，振动值从正常2mm/s升至8mm/s",
+    "expected_root_cause": "齿轮箱齿轮磨损",
+    "expected_category": "机械磨损",
+    "risk_level": "HIGH",
+    "keywords": ["齿轮箱", "振动", "啮合", "磨损"]
+  },
+  {
+    "id": "B007",
+    "device_type": "风机",
+    "device_id": "WT003",
+    "symptoms": "1号风机叶片运行声音异常，全频段出现不规则噼啪声，振动传感器读数无明显变化",
+    "expected_root_cause": "叶片覆冰或损坏",
+    "expected_category": "机械损伤",
+    "risk_level": "MEDIUM",
+    "keywords": ["风机", "叶片", "异常声音"]
+  },
+  {
+    "id": "B008",
+    "device_type": "风机",
+    "device_id": "WT005",
+    "symptoms": "风机风速仪数据异常，实测风速3m/s但风速仪显示0m/s，机组未启动",
+    "expected_root_cause": "风速仪故障",
+    "expected_category": "传感器故障",
+    "risk_level": "MEDIUM",
+    "keywords": ["风速仪", "传感器", "数据异常"]
+  },
+  {
+    "id": "B009",
+    "device_type": "风机",
+    "device_id": "WT008",
+    "symptoms": "风机发电机轴承温度85°C超过正常范围，轴承运行超过20000小时，润滑脂出现碳化现象",
+    "expected_root_cause": "发电机轴承过热",
+    "expected_category": "温度异常",
+    "risk_level": "HIGH",
+    "keywords": ["发电机", "轴承", "温度", "过热"]
+  },
+  {
+    "id": "B010",
+    "device_type": "风机",
+    "device_id": "WT010",
+    "symptoms": "风机偏航系统故障，机组无法自动对风，偏航电机电流为零，限位开关信号异常",
+    "expected_root_cause": "偏航电机故障",
+    "expected_category": "控制系统故障",
+    "risk_level": "MEDIUM",
+    "keywords": ["偏航", "电机", "限位开关"]
+  },
+  {
+    "id": "B011",
+    "device_type": "变压器",
+    "device_id": "TRA001",
+    "symptoms": "变压器油温持续升高至95°C，油色谱分析显示氢气含量超标3倍，乙炔含量异常升高",
+    "expected_root_cause": "变压器内部局部放电",
+    "expected_category": "绝缘故障",
+    "risk_level": "CRITICAL",
+    "keywords": ["变压器", "油温", "放电", "乙炔"]
+  },
+  {
+    "id": "B012",
+    "device_type": "变压器",
+    "device_id": "TRA003",
+    "symptoms": "变压器运行声音异常，50Hz基频嗡声显著增大，铁芯接地电流从正常0.1A升至2.5A",
+    "expected_root_cause": "变压器铁芯多点接地",
+    "expected_category": "接地故障",
+    "risk_level": "HIGH",
+    "keywords": ["变压器", "铁芯", "接地", "嗡声"]
+  },
+  {
+    "id": "B013",
+    "device_type": "变压器",
+    "device_id": "TRA005",
+    "symptoms": "变压器油位下降超过警戒线，油枕呼吸器硅胶变色50%，密封垫老化",
+    "expected_root_cause": "变压器漏油",
+    "expected_category": "机械故障",
+    "risk_level": "MEDIUM",
+    "keywords": ["变压器", "油位", "漏油", "密封"]
+  },
+  {
+    "id": "B014",
+    "device_type": "变压器",
+    "device_id": "TRA007",
+    "symptoms": "变压器差动保护动作跳闸，两侧CT二次回路接线松动，二次电流相位偏差超过5度",
+    "expected_root_cause": "CT二次回路接线松动",
+    "expected_category": "接线故障",
+    "risk_level": "CRITICAL",
+    "keywords": ["变压器", "差动保护", "跳闸", "CT"]
+  },
+  {
+    "id": "B015",
+    "device_type": "变压器",
+    "device_id": "TRA009",
+    "symptoms": "变压器冷却风扇全部停转，控制回路熔断器熔断，油温从正常60°C快速上升到80°C",
+    "expected_root_cause": "冷却系统故障",
+    "expected_category": "冷却系统故障",
+    "risk_level": "HIGH",
+    "keywords": ["变压器", "冷却", "风扇", "熔断器"]
+  },
+  {
+    "id": "B016",
+    "device_type": "光伏组件",
+    "device_id": "PV001",
+    "symptoms": "光伏组串电流明显低于相邻组串，红外热成像显示多个电池片温度偏高3°C以上，组件表面无明显遮挡物",
+    "expected_root_cause": "光伏组件热斑效应",
+    "expected_category": "组件故障",
+    "risk_level": "MEDIUM",
+    "keywords": ["光伏", "热斑", "温度", "电流"]
+  },
+  {
+    "id": "B017",
+    "device_type": "光伏组件",
+    "device_id": "PV003",
+    "symptoms": "光伏组串开路电压为零，其他并联组串正常，组件接线盒内有烧焦痕迹",
+    "expected_root_cause": "接线盒烧毁断路",
+    "expected_category": "电气故障",
+    "risk_level": "HIGH",
+    "keywords": ["光伏", "开路", "接线盒", "烧焦"]
+  },
+  {
+    "id": "B018",
+    "device_type": "光伏组件",
+    "device_id": "PV005",
+    "symptoms": "光伏组串输出功率下降30%，IV曲线出现阶梯状，组件表面有大面积灰尘覆盖",
+    "expected_root_cause": "组件灰尘遮挡",
+    "expected_category": "遮挡故障",
+    "risk_level": "LOW",
+    "keywords": ["光伏", "灰尘", "功率下降", "IV曲线"]
+  },
+  {
+    "id": "B019",
+    "device_type": "光伏组件",
+    "device_id": "PV007",
+    "symptoms": "光伏组串绝缘阻抗低于1MΩ，雨后更严重，MC4接头处有氧化腐蚀痕迹",
+    "expected_root_cause": "MC4接头进水氧化",
+    "expected_category": "绝缘故障",
+    "risk_level": "HIGH",
+    "keywords": ["光伏", "绝缘", "氧化", "MC4"]
+  },
+  {
+    "id": "B020",
+    "device_type": "光伏组件",
+    "device_id": "PV009",
+    "symptoms": "光伏组件出现PID效应，对地电压偏移超过200V，组件效率下降15%，恢复后效率回升",
+    "expected_root_cause": "PID效应导致组件衰减",
+    "expected_category": "组件衰减",
+    "risk_level": "MEDIUM",
+    "keywords": ["光伏", "PID", "衰减", "效率"]
+  },
+  {
+    "id": "B021",
+    "device_type": "储能电池",
+    "device_id": "BAT001",
+    "symptoms": "储能电池舱内温度超过45°C，BMS显示单体电芯温度52°C超过保护阈值，冷却空调制冷量不足",
+    "expected_root_cause": "电池热管理系统故障",
+    "expected_category": "温度异常",
+    "risk_level": "CRITICAL",
+    "keywords": ["储能", "电池", "温度", "BMS"]
+  },
+  {
+    "id": "B022",
+    "device_type": "储能电池",
+    "device_id": "BAT003",
+    "symptoms": "储能电池SOC跳变从80%突降至20%，电池管理系统报警电芯电压不均衡，最大压差超过500mV",
+    "expected_root_cause": "电芯一致性劣化",
+    "expected_category": "电池故障",
+    "risk_level": "HIGH",
+    "keywords": ["储能", "SOC", "电芯", "压差"]
+  },
+  {
+    "id": "B023",
+    "device_type": "储能电池",
+    "device_id": "BAT005",
+    "symptoms": "储能系统PCS通讯异常，功率调度指令无法下发，但电池本体状态正常",
+    "expected_root_cause": "PCS通讯故障",
+    "expected_category": "通讯故障",
+    "risk_level": "MEDIUM",
+    "keywords": ["储能", "PCS", "通讯", "调度"]
+  },
+  {
+    "id": "B024",
+    "device_type": "储能电池",
+    "device_id": "BAT007",
+    "symptoms": "储能电池舱内检测到氢气浓度超过爆炸下限的25%，排风系统未自动启动",
+    "expected_root_cause": "电池析气异常",
+    "expected_category": "安全故障",
+    "risk_level": "CRITICAL",
+    "keywords": ["储能", "氢气", "排风", "爆炸"]
+  },
+  {
+    "id": "B025",
+    "device_type": "储能电池",
+    "device_id": "BAT009",
+    "symptoms": "储能系统SOH下降至75%，循环次数超过4000次，容量衰减速度加快",
+    "expected_root_cause": "电池容量衰减",
+    "expected_category": "电池衰减",
+    "risk_level": "MEDIUM",
+    "keywords": ["储能", "SOH", "容量", "衰减"]
+  },
+  {
+    "id": "B026",
+    "device_type": "开关柜",
+    "device_id": "SWG001",
+    "symptoms": "开关柜内部检测到局部放电超声波信号，TEV传感器读数超过20dB，柜内有臭氧气味",
+    "expected_root_cause": "开关柜局部放电",
+    "expected_category": "绝缘故障",
+    "risk_level": "CRITICAL",
+    "keywords": ["开关柜", "局部放电", "TEV", "超声波"]
+  },
+  {
+    "id": "B027",
+    "device_type": "开关柜",
+    "device_id": "SWG003",
+    "symptoms": "开关柜断路器拒动，分合闸线圈电流为零，控制回路断线灯亮",
+    "expected_root_cause": "断路器控制回路断线",
+    "expected_category": "控制故障",
+    "risk_level": "HIGH",
+    "keywords": ["开关柜", "断路器", "拒动", "控制回路"]
+  },
+  {
+    "id": "B028",
+    "device_type": "开关柜",
+    "device_id": "SWG005",
+    "symptoms": "开关柜动静触头温度108°C超过国标75°C限值，红外测温显示三相触头温度不均，A相最严重",
+    "expected_root_cause": "触头接触不良过热",
+    "expected_category": "接触故障",
+    "risk_level": "CRITICAL",
+    "keywords": ["开关柜", "触头", "温度", "过热"]
+  },
+  {
+    "id": "B029",
+    "device_type": "开关柜",
+    "device_id": "SWG007",
+    "symptoms": "开关柜母线室湿度超过85%，柜内凝露严重，绝缘件表面有水珠",
+    "expected_root_cause": "开关柜凝露绝缘降低",
+    "expected_category": "环境故障",
+    "risk_level": "HIGH",
+    "keywords": ["开关柜", "凝露", "湿度", "绝缘"]
+  },
+  {
+    "id": "B030",
+    "device_type": "开关柜",
+    "device_id": "SWG009",
+    "symptoms": "开关柜SF6气体压力降至0.45MPa低于额定0.6MPa，密度继电器报警",
+    "expected_root_cause": "SF6气体泄漏",
+    "expected_category": "密封故障",
+    "risk_level": "HIGH",
+    "keywords": ["开关柜", "SF6", "压力", "泄漏"]
+  }
+]

@@ -1,0 +1,74 @@
+{
+  "summary": {
+    "total": 5,
+    "exact_match": 4,
+    "partial_match": 0,
+    "accuracy": 0.8,
+    "combined_hit_rate": 0.8,
+    "avg_latency_ms": 12826,
+    "evaluated_at": "2026-08-06T11:31:06.854810"
+  },
+  "details": [
+    {
+      "id": "B001",
+      "device": "逆变器",
+      "expected": "IGBT模块过热",
+      "predicted": "SVG静止无功发生器故障：功率模块故障、IGBT过温、直流过压、交流过流、通讯故障、并网异常、谐波超标",
+      "hit": "exact",
+      "confidence": 0.92,
+      "latency_ms": 24974
+    },
+    {
+      "id": "B002",
+      "device": "逆变器",
+      "expected": "通讯模块故障",
+      "predicted": "逆变器通讯中断排查步骤：1.检查485/CAN通讯线缆是否松动断线 2.检查通讯模块电源指示灯 3.重启通讯模块看是否恢复 4.测量通讯线路终端电阻(485应120Ω) 5.检查通讯参数配置 6.更换通讯板卡",
+      "hit": "exact",
+      "confidence": 0.92,
+      "latency_ms": 9843
+    },
+    {
+      "id": "B003",
+      "device": "逆变器",
+      "expected": "三相电流不平衡",
+      "predicted": "储能PCS变流器故障：IGBT过温、直流过压欠压、交流过流、通讯故障、绝缘故障、并网失败",
+      "hit": "miss",
+      "confidence": 0.92,
+      "latency_ms": 9862
+    },
+    {
+      "id": "B004",
+      "device": "逆变器",
+      "expected": "绝缘阻抗降低",
+      "predicted": "光伏直流侧绝缘阻抗低排查方法：1.组件接线盒受潮进水 2.直流电缆绝缘破损或老化 3.连接器密封不良进水 4.支架接地不良",
+      "hit": "exact",
+      "confidence": 0.92,
+      "latency_ms": 8706
+    },
+    {
+      "id": "B005",
+      "device": "逆变器",
+      "expected": "交流过电压",
+      "predicted": "储能PCS变流器故障：IGBT过温、直流过压欠压、交流过流、通讯故障、绝缘故障、并网失败",
+      "hit": "exact",
+      "confidence": 0.92,
+      "latency_ms": 10110
+    }
+  ],
+  "by_device": {
+    "逆变器": {
+      "total": 5,
+      "correct": 4
+    }
+  },
+  "by_risk": {
+    "HIGH": {
+      "total": 4,
+      "correct": 4
+    },
+    "MEDIUM": {
+      "total": 1,
+      "correct": 0
+    }
+  }
+}

@@ -17,7 +17,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
-from app.api import chat, diagnosis, alarm, knowledge, feedback, trace, scada, dashboard, audit
+from app.api import chat, diagnosis, alarm, knowledge, feedback, trace, scada, dashboard, audit, workorder
+from app.api import benchmark_api, rlhf_api, auth, websocket, settings_api
+from app.api import external, automation, field_api
+from app.api.rate_limit import rate_limit_middleware
+from app.api.auth import auth_middleware
+from app.utils.access_log import access_log_middleware
+from app.utils.cache import get_cache
+from app.utils.circuit_breaker import get_breaker
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -50,6 +57,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 限流中间件 — 每 IP 每分钟最多 60 请求
+app.middleware("http")(rate_limit_middleware)
+
+# JWT 认证中间件
+app.middleware("http")(auth_middleware)
+
+# 请求日志审计中间件
+app.middleware("http")(access_log_middleware)
+
+
+# Access log 单独文件输出
+access_logger = logging.getLogger("access")
+access_logger.setLevel(logging.INFO)
+if not access_logger.handlers:
+    fh = logging.FileHandler(Path(__file__).parent.parent / "logs" / "access.log")
+    fh.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    access_logger.addHandler(fh)
 
 
 # ================================================================
@@ -169,15 +194,35 @@ app.include_router(trace.router)
 app.include_router(scada.router)
 app.include_router(dashboard.router)
 app.include_router(audit.router)
+app.include_router(workorder.router)
+app.include_router(benchmark_api.router)
+app.include_router(rlhf_api.router)
+app.include_router(auth.router)
+app.include_router(websocket.router)
+app.include_router(settings_api.router)
+app.include_router(external.router)
+app.include_router(automation.router)
+app.include_router(field_api.router)
 
 
 @app.get("/health")
 async def health():
+    llm_status = "degraded"
+    try:
+        from app.agent.llm_provider import hybrid_llm
+        llm_status = hybrid_llm.mode_status()["current"]
+    except Exception:
+        llm_status = "unknown"
+
+    cache_stats = get_cache().stats
+
     return {
         "status": "healthy",
         "service": "yuneng",
-        "version": "1.0.0",
+        "version": "1.5.0",
         "model": settings.deepseek_model,
+        "llm_provider": llm_status,
+        "cache": cache_stats,
     }
 
 

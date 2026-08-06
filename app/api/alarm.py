@@ -7,6 +7,7 @@
 import json
 import uuid
 import logging
+import asyncio
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
@@ -18,6 +19,8 @@ from app.graph.builder import get_graph
 from app.graph.state_keys import StateKeys as K
 from app.memory.memory_service import get_memory
 from app.skill.registry import skill_registry
+from app.api.websocket import broadcast_alarm
+from app.services.alert_filter import should_trigger_diagnosis
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/alarm", tags=["alarm"])
@@ -27,8 +30,8 @@ _tasks: dict[str, dict] = {}
 
 
 class AlarmReceiveRequest(BaseModel):
-    alarm_id: str = Field(..., description="告警编号")
-    device_id: str = Field(..., description="设备编号")
+    alarm_id: str = Field(..., min_length=1, description="告警编号")
+    device_id: str = Field(..., min_length=1, description="设备编号")
     station: str = Field("", description="场站")
     device_name: str = Field("", description="设备名称")
     device_type: str = Field("", description="设备类型")
@@ -66,12 +69,32 @@ async def receive_alarm(req: AlarmReceiveRequest):
         "auto_diagnose": req.auto_diagnose,
     }
 
+    asyncio.ensure_future(broadcast_alarm({
+        "id": req.alarm_id,
+        "device_id": req.device_id,
+        "alarm_type": req.alarm_type,
+        "alarm_level": req.alarm_level,
+        "message": req.alarm_message or f"{req.alarm_type} 告警",
+        "status": "active",
+        "timestamp": datetime.now().isoformat(),
+    }))
+
     if not req.auto_diagnose:
         return {
             "task_id": task_id,
             "alarm_id": req.alarm_id,
             "status": "RECEIVED",
             "message": "告警已接收，请调用 /api/alarm/diagnose 启动诊断",
+        }
+
+    should_diag, filter_reason = should_trigger_diagnosis(req.device_id, req.alarm_type)
+    if not should_diag:
+        _tasks[task_id]["status"] = "FILTERED"
+        _tasks[task_id]["filter_reason"] = filter_reason
+        logger.info(f"告警被过滤: {req.alarm_id} {filter_reason}")
+        return {
+            "task_id": task_id, "alarm_id": req.alarm_id,
+            "status": "FILTERED", "message": f"告警已接收但未触发诊断: {filter_reason}",
         }
 
     skill = skill_registry.select_by_intent("DIAGNOSIS")

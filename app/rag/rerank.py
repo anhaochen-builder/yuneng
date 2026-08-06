@@ -162,3 +162,12 @@ def _tokenize(s: str) -> set[str]:
 
 # 保持向后兼容
 RerankService = BGECrossEncoderReranker
+
+_reranker_instance: Optional[BGECrossEncoderReranker] = None
+
+
+def get_reranker() -> BGECrossEncoderReranker:
+    global _reranker_instance
+    if _reranker_instance is None:
+        _reranker_instance = BGECrossEncoderReranker()
+    return _reranker_instance

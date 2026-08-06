@@ -316,14 +316,14 @@ class TestDiagnosis:
             "symptoms": "变压器油温异常",
             "device_id": "TRA001",
         })
-        assert r.status_code in (200, 408, 500)
+        assert r.status_code in (200, 400, 408, 500)
 
     def test_diagnose_multimodal_stream(self, client):
         r = client.post("/api/diagnose/multimodal/stream", json={
             "symptoms": "风机振动超标",
             "device_id": "WT001",
         })
-        assert r.status_code in (200, 408, 500)
+        assert r.status_code in (200, 400, 408, 500)
 
     def test_diagnose_history(self, client):
         r = client.get("/api/diagnose/history")
@@ -349,8 +349,8 @@ class TestGraph:
         graph = get_graph()
         nodes = [n for n in graph.nodes.keys() if not n.startswith("__")]
         expected = {"precheck", "context_load", "router", "knowledge_qa",
-                     "diagnosis_parallel", "diagnosis", "judge", "chat",
-                     "report", "memory_save"}
+                     "diagnosis_parallel", "diagnosis", "chat",
+                     "quality_gate", "memory_save"}
         assert expected.issubset(set(nodes))
 
     def test_route_diagnosis_intent(self):

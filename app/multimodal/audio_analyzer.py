@@ -22,7 +22,17 @@ try:
     import numpy as np
     _AUDIO_AVAILABLE = True
 except ImportError:
-    logger.info("librosa 未安装，音频分析降级为元数据模式。安装: pip install librosa numpy")
+    pass
+
+_SOUNDFILE_AVAILABLE = False
+try:
+    import soundfile as sf
+    _SOUNDFILE_AVAILABLE = True
+except ImportError:
+    pass
+
+if not _AUDIO_AVAILABLE and not _SOUNDFILE_AVAILABLE:
+    logger.info("librosa/soundfile 未安装，音频分析降级为元数据模式。安装: pip install librosa 或 pip install soundfile")
 
 FAULT_SOUND_PATTERNS = {
     "bearing_friction": {
@@ -69,6 +79,7 @@ class AudioAnalyzer:
 
     def __init__(self):
         self._available = _AUDIO_AVAILABLE
+        self._basic_available = _AUDIO_AVAILABLE or _SOUNDFILE_AVAILABLE
 
     @property
     def available(self) -> bool:
@@ -112,6 +123,8 @@ class AudioAnalyzer:
 
         if self._available:
             return self._analyze_with_librosa(audio_path, device_type, base_result)
+        elif _SOUNDFILE_AVAILABLE:
+            return self._analyze_with_soundfile(audio_path, device_type, base_result)
         else:
             return self._fallback_analysis(audio_path, device_type, base_result)
 
@@ -218,6 +231,34 @@ class AudioAnalyzer:
 
         matches.sort(key=lambda m: m["score"], reverse=True)
         return matches
+
+    def _analyze_with_soundfile(
+        self, audio_path: str, device_type: str, base: dict
+    ) -> dict[str, Any]:
+        """使用 soundfile 读取基础音频信息（轻量降级方案）"""
+        try:
+            info = sf.info(audio_path)
+            base["success"] = True
+            base["duration_secs"] = round(info.duration, 2)
+            base["sample_rate"] = info.samplerate
+            base["channels"] = info.channels
+            base["note"] = "soundfile 基础分析模式 — 安装 librosa 获取频谱分析"
+            base["possible_faults"] = [
+                {
+                    "pattern_id": pid,
+                    "name": p["name"],
+                    "score": 0.0,
+                    "reasons": ["基础模式 — 需安装 librosa 进行频域分析"],
+                    "freq_range": p["freq_range"],
+                    "typical": p["典型场景"],
+                }
+                for pid, p in FAULT_SOUND_PATTERNS.items()
+            ]
+            logger.info(f"音频基础分析完成: {audio_path}, 时长 {info.duration:.1f}s, 采样率 {info.samplerate}Hz")
+        except Exception as e:
+            base["note"] = f"音频读取失败: {e}"
+            logger.warning(f"soundfile 分析失败: {e}")
+        return base
 
     def _fallback_analysis(
         self, audio_path: str, device_type: str, base: dict

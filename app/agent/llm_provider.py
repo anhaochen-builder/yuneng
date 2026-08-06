@@ -267,6 +267,7 @@ class HybridProvider:
         self._lock = threading.Lock()
         self._recovery_interval = 60
         self._recovery_thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
         self._init_providers()
 
     def _init_providers(self):
@@ -292,8 +293,10 @@ class HybridProvider:
             return
 
         def recover_loop():
-            while True:
-                time.sleep(self._recovery_interval)
+            while not self._stop_event.is_set():
+                self._stop_event.wait(self._recovery_interval)
+                if self._stop_event.is_set():
+                    break
                 if self._current.provider_name != "deepseek":
                     deepseek = self._providers["deepseek"]
                     if deepseek.health_check():
@@ -320,24 +323,28 @@ class HybridProvider:
         return self._current.provider_name
 
     def chat(self, system_prompt: str, user_prompt: str,
-             temperature: float = 0.1, max_tokens: int = 2048) -> str:
+             temperature: float = 0.1, max_tokens: int = 2048, _retry: int = 0) -> str:
         provider = self._current
         try:
             return provider.chat(system_prompt, user_prompt, temperature, max_tokens)
         except Exception as e:
             logger.warning(f"Provider [{provider.provider_name}] 调用失败: {e}")
             self._try_downgrade(provider)
-            return self.chat(system_prompt, user_prompt, temperature, max_tokens)
+            if _retry < 2:
+                return self.chat(system_prompt, user_prompt, temperature, max_tokens, _retry + 1)
+            return "所有LLM Provider不可用，请稍后重试"
 
     def chat_json(self, system_prompt: str, user_prompt: str,
-                  temperature: float = 0.1) -> dict:
+                  temperature: float = 0.1, _retry: int = 0) -> dict:
         provider = self._current
         try:
             return provider.chat_json(system_prompt, user_prompt, temperature)
         except Exception as e:
             logger.warning(f"Provider [{provider.provider_name}] JSON调用失败: {e}")
             self._try_downgrade(provider)
-            return self.chat_json(system_prompt, user_prompt, temperature)
+            if _retry < 2:
+                return self.chat_json(system_prompt, user_prompt, temperature, _retry + 1)
+            return {"error": "所有LLM Provider不可用", "fallback": True}
 
     def _try_downgrade(self, failed_provider: BaseLLMProvider):
         order = ["deepseek", "qwen-local", "rule-engine"]

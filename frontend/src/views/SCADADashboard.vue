@@ -13,6 +13,7 @@ const devices = ref<any[]>([])
 const bufferStats = ref({ total_points: 0, capacity: 1800000 })
 const scadaForm = ref({ device_id: '', device_type: 'inverter', host: '127.0.0.1', port: 502, protocol: 'modbus', mock_mode: true })
 const connecting = ref(false)
+const scadaZoomed = ref(false)
 const selectedDevice = ref<string | null>(null)
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 
@@ -144,7 +145,12 @@ const typeOptions = [
       </div>
 
       <div class="tech-card">
-        <h4>🔌 添加设备</h4>
+        <h4>🔌 添加设备
+          <el-button size="small" text @click="scadaZoomed = !scadaZoomed" style="float:right;font-size:16px">
+            {{ scadaZoomed ? '🔍' : '🔎' }}
+          </el-button>
+        </h4>
+        <div :class="scadaZoomed ? '' : 'compact-80'">
         <el-form :model="scadaForm" label-width="70px" size="small">
           <el-form-item label="设备ID"><el-input v-model="scadaForm.device_id" placeholder="如: INV003" /></el-form-item>
           <el-form-item label="设备类型">
@@ -166,6 +172,7 @@ const typeOptions = [
             </el-button>
           </el-form-item>
         </el-form>
+        </div>
         <div class="buffer-info">
           <span>环形缓冲区: {{ ((bufferStats.total_points || 0) / 10000).toFixed(1) }}万 / {{ (bufferStats.capacity / 10000).toFixed(1) }}万</span>
           <el-progress :percentage="Math.min(((bufferStats.total_points||0)/bufferStats.capacity)*100, 100)" :stroke-width="4" color="var(--color-accent)" />
@@ -191,5 +198,20 @@ h4 { color: var(--color-accent); margin-bottom: 10px; font-size: 13px; font-weig
 .buffer-info {
   margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(0,240,255,0.06);
   font-size: 11px; color: var(--color-text-secondary);
+}
+
+:deep(.el-form-item__label) { font-size: 13px !important; }
+:deep(.el-form-item .el-input__inner) { font-size: 13px !important; }
+:deep(.el-form-item .el-select) { font-size: 13px; }
+:deep(.el-form-item .el-input-number) { font-size: 13px; }
+:deep(.el-table) { font-size: 13px; }
+:deep(.el-table th) { font-size: 13px !important; }
+:deep(.el-table td) { font-size: 13px !important; }
+:deep(.el-button) { font-size: 13px !important; }
+
+.compact-80 {
+  transform: scale(0.8);
+  transform-origin: top left;
+  width: 125%;
 }
 </style>

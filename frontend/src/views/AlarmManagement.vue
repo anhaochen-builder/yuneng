@@ -13,6 +13,7 @@ const submitting = ref(false)
 const diagResult = ref<any>(null)
 const filterLevel = ref<string>('all')
 const showForm = ref(false)
+const alarmZoomed = ref(false)
 
 onMounted(async () => {
   try { await alarmApi.health() } catch {}
@@ -83,10 +84,15 @@ const quickAlarms = [
       <div class="tech-card">
         <div class="card-header">
           <h4>🚨 告警接收</h4>
-          <el-button size="small" text @click="showForm = !showForm">{{ showForm ? '收起' : '展开' }}</el-button>
+          <div style="display:flex;gap:6px">
+            <el-button size="small" text @click="alarmZoomed = !alarmZoomed" style="font-size:16px">
+              {{ alarmZoomed ? '🔍' : '🔎' }}
+            </el-button>
+            <el-button size="small" text @click="showForm = !showForm">{{ showForm ? '收起' : '展开' }}</el-button>
+          </div>
         </div>
 
-        <!-- 快速告警 -->
+        <div :class="alarmZoomed ? '' : 'compact-80'">
         <div class="quick-alarms">
           <el-tag v-for="qa in quickAlarms" :key="qa.label" size="small" effect="plain" 
             @click="alarmForm.alarm_type = qa.alarm_type; alarmForm.device_type = qa.device_type; alarmForm.alarm_level = qa.level; alarmForm.alarm_message = qa.msg; showForm = true"
@@ -145,6 +151,7 @@ const quickAlarms = [
             </el-col>
           </el-row>
         </el-form>
+        </div>
       </div>
 
       <!-- 告警记录 -->
@@ -256,4 +263,9 @@ const quickAlarms = [
 }
 
 h4 { color: var(--color-accent); margin-bottom: 12px; font-size: 14px; }
+.compact-80 {
+  transform: scale(0.8);
+  transform-origin: top left;
+  width: 125%;
+}
 </style>
