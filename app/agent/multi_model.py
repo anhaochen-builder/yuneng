@@ -19,6 +19,8 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+DIAGNOSIS_TIMEOUT = 15
+
 
 class MultiModelClient:
     def __init__(self):
@@ -61,7 +63,7 @@ class MultiModelClient:
             for future in futures:
                 model = futures[future]
                 try:
-                    results[model] = self._call_and_parse(model, system_prompt, user_prompt)
+                    results[model] = future.result(timeout=DIAGNOSIS_TIMEOUT)
                 except Exception as e:
                     logger.warning(f"模型 {model} 调用失败: {e}")
                     results[model] = None
@@ -110,12 +112,13 @@ class MultiModelClient:
                 {"role": "user", "content": user},
             ],
             temperature=0.1,
-            max_tokens=2048,
+            max_tokens=1200,
+            timeout=DIAGNOSIS_TIMEOUT,
         )
 
         if "reasoner" in model or "r1" in model:
             del kwargs["temperature"]
-            kwargs["max_tokens"] = 2048
+            kwargs["max_tokens"] = 1536
 
         response = client.chat.completions.create(**kwargs)
         return response.choices[0].message.content or ""

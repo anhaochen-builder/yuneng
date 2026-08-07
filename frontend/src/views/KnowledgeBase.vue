@@ -216,9 +216,9 @@ h4 { color: var(--color-accent); margin-bottom: 12px; font-size: 14px; }
   border-radius: 6px; border: 1px solid rgba(0,240,255,0.06);
   animation: slideUp 0.4s ease-out both;
 }
-.result-rank { color: var(--color-accent); font-weight: 700; font-size: 13px; min-width: 22px; }
+.result-rank { color: var(--color-accent); font-weight: 700; font-size: 22px; min-width: 22px; }
 .result-body { flex: 1; }
-.result-text { font-size: 13px; line-height: 1.7; color: var(--color-text-primary); }
+.result-text { font-size: 22px; line-height: 1.8; color: var(--color-text-primary); }
 .result-meta { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .score-badge { font-size: 11px; color: var(--color-accent); background: rgba(0,240,255,0.1); padding: 2px 8px; border-radius: 4px; }
 .source-badge { font-size: 11px; color: var(--color-text-secondary); background: rgba(255,255,255,0.04); padding: 2px 8px; border-radius: 4px; }

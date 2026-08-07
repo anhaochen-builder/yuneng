@@ -21,7 +21,6 @@ NODE_STATUS_MAP: dict[str, str] = {
     "safety_review": "正在进行安全审查...",
     "final_response": "正在生成诊断报告...",
     "memory_save": "正在保存会话记录...",
-    "plan_execute": "并行制定诊断计划+执行分析...",
     "evidence_validation": "验证证据充分性...",
     "risk_action": "风险评估+行动建议生成...",
     "replanner": "诊断质量复核...",
@@ -66,8 +65,18 @@ def context_load_node(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def router_node(state: dict[str, Any]) -> dict[str, Any]:
-    """Router: 意图识别"""
     question = state.get(K.CLEANED_INPUT, state.get(K.INPUT, ""))
+    existing_intent = state.get(K.INTENT, "")
+    existing_confidence = state.get(K.CONFIDENCE, 0.0)
+    existing_entities = state.get(K.ENTITIES) or {}
+
+    if existing_intent and existing_confidence > 0:
+        return {
+            K.INTENT: existing_intent,
+            K.CONFIDENCE: existing_confidence,
+            K.ENTITIES: existing_entities,
+        }
+
     result = router_agent.route(question)
     ctx = HookContext(input=question, intent=result.get("intent", "CHAT"),
                       confidence=result.get("confidence", 0.5),

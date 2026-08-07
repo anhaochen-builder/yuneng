@@ -40,6 +40,29 @@ async def lifespan(app: FastAPI):
     from app.skill.registry import skill_registry
     register_all()
     logger.info(f"所有子智能体已注册: {len(sub_agent_registry._agents)} 个 SubAgent, {len(skill_registry._skills)} 个 Skill")
+
+    import asyncio as _asyncio
+    import concurrent.futures as _futures
+
+    def _prewarm_models():
+        import logging as _logging
+        _log = _logging.getLogger("prewarm")
+        try:
+            from app.rag.vector_store import _try_load_embedding
+            _log.info("预热嵌入模型...")
+            _try_load_embedding()
+        except Exception as e:
+            _log.warning(f"嵌入模型预热跳过: {e}")
+        try:
+            from app.rag.rerank import _load_rerank_model
+            _log.info("预热重排序模型...")
+            _load_rerank_model()
+        except Exception as e:
+            _log.warning(f"重排序预热跳过: {e}")
+
+    loop = _asyncio.get_event_loop()
+    executor = _futures.ThreadPoolExecutor(max_workers=1)
+    loop.run_in_executor(executor, _prewarm_models)
     yield
 
 

@@ -29,6 +29,7 @@ class LLMClient:
             ],
             temperature=temperature,
             max_tokens=max_tokens,
+            timeout=30,
         )
         if response_format == "json":
             kwargs["response_format"] = {"type": "json_object"}

@@ -95,10 +95,8 @@ def _create_checkpointer():
         saver = AsyncSqliteSaver(conn)
         logger.info(f"AsyncSqliteSaver 持久化就绪: {db_path}")
         return saver
-    except (ImportError, OSError) as e:
-        logger.warning(f"AsyncSqliteSaver 不可用: {e}")
-    except RuntimeError as e:
-        logger.warning(f"AsyncSqliteSaver 事件循环绑定失败，降级内存模式: {e}")
+    except Exception:
+        logger.debug("AsyncSqliteSaver 不可用，使用内存模式")
     return MemorySaver()
 
 
@@ -148,10 +146,12 @@ async def _quality_gate_wrapper(state: AgentState) -> dict[str, Any]:
         judge_agent = sub_agent_registry.get("judge-agent")
         if judge_agent:
             try:
-                result = await judge_agent.arun(state)
+                result = await asyncio.wait_for(judge_agent.arun(state), timeout=10)
                 score = result.get("judge_score", 60)
                 result[K.CONFIDENCE] = max(confidence, score / 100.0)
                 return result
+            except asyncio.TimeoutError:
+                logger.warning("Judge Agent 超时，跳过质量评估")
             except Exception as e:
                 logger.warning(f"Judge Agent 评估失败: {e}")
     return {}

@@ -119,69 +119,129 @@ async def diagnose_stream(req: DiagnosisRequest):
     }
 
     async def generate():
+        def sse(data: dict) -> str:
+            return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
         try:
-            yield f"data: {json.dumps({'type': 'start', 'task_id': task_id})}\n\n"
-            yield f"data: {json.dumps({'type': 'status', 'message': '正在启动诊断...', 'node': 'start'})}\n\n"
+            yield sse({'type': 'start', 'data': {'task_id': task_id}})
 
             from app.agent.llm_provider import hybrid_llm
             current_mode = hybrid_llm.current_mode
 
             if current_mode in ("rule-engine", "qwen-local"):
-                yield f"data: {json.dumps({'type': 'status', 'message': '离线模式：启动案例推理引擎...', 'node': 'offline_diagnosis'})}\n\n"
+                yield sse({'type': 'status', 'data': {'message': '离线模式：启动案例推理引擎...', 'node': 'offline_diagnosis'}})
                 try:
                     from app.agent.case_reasoner import case_reasoner
                     offline_result = case_reasoner.diagnose(req.symptoms, req.device_id or "")
-                    yield f"data: {json.dumps({'type': 'diagnosis', 'data': {
+                    yield sse({'type': 'diagnosis', 'data': {
                         'root_causes': [{'cause': offline_result['root_cause'], 'probability': offline_result['confidence']}],
                         'confidence': offline_result['confidence'],
                         'risk_level': offline_result['risk_level'],
-                    }}, ensure_ascii=False)}\n\n"
-
+                    }})
                     report_text = offline_result['report_text']
-                    chunk_size = 200
-                    for i in range(0, len(report_text), chunk_size):
-                        yield f"data: {json.dumps({'type': 'content', 'text': report_text[i:i + chunk_size]}, ensure_ascii=False)}\n\n"
-
+                    for i in range(0, len(report_text), 200):
+                        yield sse({'type': 'content', 'data': {'text': report_text[i:i + 200]}})
                     yield "data: [DONE]\n\n"
                     memory.save_to_session(session_id, req.symptoms, report_text)
                     return
                 except Exception as e:
-                    yield f"data: {json.dumps({'type': 'warning', 'message': f'离线引擎异常，降级LLM: {e}'})}\n\n"
+                    yield sse({'type': 'status', 'data': {'message': f'离线引擎异常: {e}'}})
 
-            graph = get_graph()
-            config = {"configurable": {"thread_id": task_id}}
+            yield sse({'type': 'status', 'data': {'message': '正在提取实体...', 'node': 'entity_extract'}})
 
-            full_state: dict = {}
+            import re
+            entities = {}
+            try:
+                from app.rag.knowledge_graph import KnowledgeGraphService
+                kg = KnowledgeGraphService()
+                entities = kg.extract_entities(req.symptoms)
+            except Exception:
+                pass
 
-            async for event in graph.astream(state, config, stream_mode="updates"):
-                for node_name, node_output in event.items():
-                    msg = _node_status_message(node_name)
-                    if msg:
-                        yield f"data: {json.dumps({'type': 'status', 'message': msg, 'node': node_name})}\n\n"
+            device_id = entities.get("device_id", "") or req.device_id or ""
+            if not device_id:
+                match = re.search(r'[A-Z]+\d+', req.symptoms)
+                if match:
+                    device_id = match.group()
+            device_type = entities.get("device_type", "")
 
-                    if isinstance(node_output, dict):
-                        full_state.update(node_output)
+            yield sse({'type': 'status', 'data': {'message': '正在检索知识库...', 'node': 'alarm_rag'}})
 
-            result = full_state if full_state else state
+            query = req.symptoms
+            if device_type and device_type not in query:
+                query = f"{device_type} {query}"
 
-            diag_data = result.get(K.DIAGNOSIS_RESULT, {})
-            if diag_data:
-                yield f"data: {json.dumps({'type': 'diagnosis', 'data': {
-                    'root_causes': diag_data.get('root_causes', []),
-                    'confidence': result.get(K.CONFIDENCE, 0.5),
-                    'risk_level': result.get(K.RISK_LEVEL, 'MEDIUM'),
-                }}, ensure_ascii=False)}\n\n"
+            from app.graph.subgraphs.diagnosis import hybrid_search, kg_service
+            keyword_results = hybrid_search.search(query, top_k=8, use_rerank=False)
+            graph_context = kg_service.build_graph_context(query)
 
-            response_text = result.get(K.EXECUTION_RESULT, result.get(K.FINAL_RESPONSE, ""))
-            chunk_size = 200
-            for i in range(0, len(response_text), chunk_size):
-                yield f"data: {json.dumps({'type': 'content', 'text': response_text[i:i + chunk_size]}, ensure_ascii=False)}\n\n"
+            rag_parts = []
+            if graph_context:
+                rag_parts.append(graph_context)
+            rag_parts.extend([f"[参考{i+1}] {r['text'][:400]}" for i, r in enumerate(keyword_results[:5])])
+            rag_text = "\n\n".join(rag_parts)
 
+            yield sse({'type': 'status', 'data': {'message': 'DeepSeek正在深度推理...', 'node': 'diagnose'}})
+
+            device_info = f"设备类型:{device_type or '未知'}"
+            if device_id:
+                device_info += f" ID:{device_id}"
+            context_parts = [f"故障: {req.symptoms}", device_info]
+            if rag_text:
+                context_parts.append(f"知识库参考:\n{rag_text}")
+            full_context = "\n\n".join(context_parts)
+
+            prompt = """新能源场站智能诊断专家。简洁报告，全中文，禁止任何英文单词和缩写(包括IGBT/NTC等统一用中文)。
+
+## 诊断结论 (根因+置信度+风险等级)
+## 推理过程
+## 可能原因(3-4个)
+## 处置建议(2-4条)
+## 安全提示
+
+末尾单独一行: 置信度:X% 风险:高/中/低"""
+
+            from app.agent.llm_client import llm
+            full_text = ""
+            buffer = ""
+            try:
+                for chunk in llm.stream(prompt, full_context, temperature=0.1):
+                    full_text += chunk
+                    buffer += chunk
+                    if len(buffer) >= 20 or '\n' in buffer:
+                        yield sse({'type': 'content', 'data': {'text': buffer}})
+                        buffer = ""
+                if buffer:
+                    yield sse({'type': 'content', 'data': {'text': buffer}})
+            except Exception as e:
+                logger.error(f"流式LLM失败: {e}, 降级同步")
+                full_text = llm.chat(prompt, full_context, temperature=0.1, max_tokens=350)
+                yield sse({'type': 'content', 'data': {'text': full_text}})
+
+            import re as _re
+            conf_match = _re.search(r'置信度\s*[:：]\s*(\d+)\s*%', full_text)
+            risk_match = _re.search(r'风险\s*[:：]\s*(高|中|低)', full_text)
+            parsed = {}
+            if conf_match:
+                parsed["confidence"] = int(conf_match.group(1)) / 100.0
+            if risk_match:
+                rmap = {"高": "HIGH", "中": "MEDIUM", "低": "LOW"}
+                parsed["risk_level"] = rmap.get(risk_match.group(1), "MEDIUM")
+
+            confidence = max(parsed.get("confidence", 0.5), 0.5) if rag_text else parsed.get("confidence", 0.5)
+
+            yield sse({'type': 'diagnosis', 'data': {
+                'root_causes': [{'cause': parsed.get('root_cause', ''), 'probability': confidence,
+                                 'confidence_level': 'high' if confidence > 0.8 else 'medium'}],
+                'confidence': confidence,
+                'risk_level': parsed.get('risk_level', 'MEDIUM'),
+            }})
             yield "data: [DONE]\n\n"
-            memory.save_to_session(session_id, req.symptoms, response_text)
+            memory.save_to_session(session_id, req.symptoms, full_text)
+
         except Exception as e:
             logger.error(f"诊断失败: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield sse({'type': 'error', 'data': {'message': str(e)}})
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 
@@ -323,31 +383,34 @@ async def diagnose_multimodal_stream(req: MultimodalRequest):
     skill_context = skill.prompt_template if skill else ""
 
     async def generate():
+        def sse(data: dict) -> str:
+            return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
         try:
-            yield f"data: {json.dumps({'type': 'start', 'task_id': task_id})}\n\n"
+            yield sse({'type': 'start', 'data': {'task_id': task_id}})
 
             multimodal_text = ""
 
             if req.images:
-                yield f"data: {json.dumps({'type': 'status', 'message': '正在分析设备图像...', 'node': 'image_analysis'})}\n\n"
+                yield sse({'type': 'status', 'data': {'message': '正在分析设备图像...', 'node': 'image_analysis'}})
                 try:
                     from app.multimodal.image_analyzer import image_analyzer
                     for idx, img_b64 in enumerate(req.images):
                         result = image_analyzer.analyze(img_b64, "auto", req.device_id or "", req.symptoms)
                         multimodal_text += image_analyzer.to_text_summary(result) + "\n\n"
-                    yield f"data: {json.dumps({'type': 'multimodal', 'mode': 'image', 'count': len(req.images)})}\n\n"
+                    yield sse({'type': 'status', 'data': {'message': f'图像分析完成({len(req.images)}张)', 'node': 'image_analysis'}})
                 except Exception as e:
-                    yield f"data: {json.dumps({'type': 'warning', 'message': f'图像分析失败: {e}'})}\n\n"
+                    yield sse({'type': 'status', 'data': {'message': f'图像分析失败: {e}'}})
 
             if req.audio_path:
-                yield f"data: {json.dumps({'type': 'status', 'message': '正在分析设备声音...', 'node': 'audio_analysis'})}\n\n"
+                yield sse({'type': 'status', 'data': {'message': '正在分析设备声音...', 'node': 'audio_analysis'}})
                 try:
                     from app.multimodal.audio_analyzer import audio_analyzer
                     audio_result = audio_analyzer.analyze(req.audio_path)
                     multimodal_text += audio_analyzer.to_text_summary(audio_result) + "\n\n"
-                    yield f"data: {json.dumps({'type': 'multimodal', 'mode': 'audio'})}\n\n"
+                    yield sse({'type': 'status', 'data': {'message': '音频分析完成', 'node': 'audio_analysis'}})
                 except Exception as e:
-                    yield f"data: {json.dumps({'type': 'warning', 'message': f'音频分析失败: {e}'})}\n\n"
+                    yield sse({'type': 'status', 'data': {'message': f'音频分析失败: {e}'}})
 
             enriched_input = req.symptoms
             if multimodal_text:
@@ -355,22 +418,22 @@ async def diagnose_multimodal_stream(req: MultimodalRequest):
 
             from app.agent.llm_provider import hybrid_llm
             if hybrid_llm.current_mode in ("rule-engine", "qwen-local"):
-                yield f"data: {json.dumps({'type': 'status', 'message': '离线模式：启动案例推理引擎...'})}\n\n"
+                yield sse({'type': 'status', 'data': {'message': '离线模式：启动案例推理引擎...'}})
                 try:
                     from app.agent.case_reasoner import case_reasoner
                     offline_result = case_reasoner.diagnose(enriched_input, req.device_id or "")
-                    yield f"data: {json.dumps({'type': 'diagnosis', 'data': {
+                    yield sse({'type': 'diagnosis', 'data': {
                         'root_causes': [{'cause': offline_result['root_cause'], 'probability': offline_result['confidence']}],
                         'confidence': offline_result['confidence'], 'risk_level': offline_result['risk_level'],
-                    }}, ensure_ascii=False)}\n\n"
+                    }})
                     report_text = offline_result['report_text']
                     for i in range(0, len(report_text), 200):
-                        yield f"data: {json.dumps({'type': 'content', 'text': report_text[i:i + 200]}, ensure_ascii=False)}\n\n"
+                        yield sse({'type': 'content', 'data': {'text': report_text[i:i + 200]}})
                     yield "data: [DONE]\n\n"
                     memory.save_to_session(session_id, req.symptoms, report_text)
                     return
                 except Exception as e:
-                    yield f"data: {json.dumps({'type': 'warning', 'message': f'离线引擎不可用: {e}'})}\n\n"
+                    yield sse({'type': 'status', 'data': {'message': f'离线引擎不可用: {e}'}})
 
             state: dict = {
                 K.INPUT: enriched_input,
@@ -399,7 +462,7 @@ async def diagnose_multimodal_stream(req: MultimodalRequest):
                 for node_name, node_output in event.items():
                     msg = MULTIMODAL_NODE_MAP.get(node_name, _node_status_message(node_name))
                     if msg:
-                        yield f"data: {json.dumps({'type': 'status', 'message': msg, 'node': node_name})}\n\n"
+                        yield sse({'type': 'status', 'data': {'message': msg, 'node': node_name}})
                     if isinstance(node_output, dict):
                         full_state.update(node_output)
 
@@ -407,22 +470,21 @@ async def diagnose_multimodal_stream(req: MultimodalRequest):
 
             diag_data = result.get(K.DIAGNOSIS_RESULT, {})
             if diag_data:
-                yield f"data: {json.dumps({'type': 'diagnosis', 'data': {
+                yield sse({'type': 'diagnosis', 'data': {
                     'root_causes': diag_data.get('root_causes', []),
                     'confidence': result.get(K.CONFIDENCE, 0.5),
                     'risk_level': result.get(K.RISK_LEVEL, 'MEDIUM'),
-                }}, ensure_ascii=False)}\n\n"
+                }})
 
             response_text = result.get(K.EXECUTION_RESULT, result.get(K.FINAL_RESPONSE, ""))
-            chunk_size = 200
-            for i in range(0, len(response_text), chunk_size):
-                yield f"data: {json.dumps({'type': 'content', 'text': response_text[i:i + chunk_size]}, ensure_ascii=False)}\n\n"
+            for i in range(0, len(response_text), 200):
+                yield sse({'type': 'content', 'data': {'text': response_text[i:i + 200]}})
 
             yield "data: [DONE]\n\n"
             memory.save_to_session(session_id, req.symptoms, response_text)
         except Exception as e:
             logger.error(f"多模态诊断失败: {e}")
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            yield sse({'type': 'error', 'data': {'message': str(e)}})
 
     return StreamingResponse(generate(), media_type="text/event-stream")
 

@@ -1,15 +1,16 @@
-"""Diagnosis 子智能体 — 9 节点完整诊断流程
+"""Diagnosis 子智能体 — 6 节点快速诊断流程 (优化版, 目标 < 20s)
 
-1. EntityExtract → 2. AlarmRAG → 3. Planner → 4. Executor(4并行)
-→ 5. EvidenceValidation → 6. Diagnose → 7. Replanner
-→ 8. RiskAssessment → 9. ActionRecommend
+① EntityExtract → ② AlarmRAG → ③ Diagnose → ④ Replanner → ⑤ Risk+Action → END
 
-符合项目技术文档 3.5 节精确规格。
+优化: 移除未连接的 plan_execute/executor 死代码, 移除 action_recommend LLM 调用,
+      精简 prompt, 并行化实体提取, 添加超时控制。
 """
 
-import asyncio
 import json
 import logging
+import re
+import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any
 
 from langgraph.graph import StateGraph, START, END
@@ -29,12 +30,16 @@ hybrid_search = HybridSearchService()
 kg_service = KnowledgeGraphService()
 hook_engine = create_hook_engine()
 
+DIAGNOSIS_TIMEOUT = 15
+RAG_CACHE: dict[str, tuple[float, str]] = {}
+RAG_CACHE_TTL = 30
+
 
 class DiagnosisSubAgent(BaseSubAgent):
     meta = SubAgentMeta(
         agent_id="diagnosis-agent",
-        name="故障诊断核心引擎",
-        description="9节点完整诊断流程: 实体提取→RAG检索→计划制定→并行执行→证据验证→综合诊断→重规划→风险评估→行动建议",
+        name="故障诊断核心引擎(优化版)",
+        description="6节点快速诊断: 实体提取→RAG检索→综合诊断→重规划→风险评估+行动建议, 目标<20s",
         category="diagnosis",
         intent_triggers=[
             "DIAGNOSIS", "FAULT_DIAGNOSIS", "ALARM_DIAGNOSIS",
@@ -46,22 +51,15 @@ class DiagnosisSubAgent(BaseSubAgent):
     )
 
     def build_nodes(self, builder: StateGraph) -> None:
-        # 9 个逻辑节点，其中 plan_execute 和 risk_action 内部并行执行
         builder.add_node("entity_extract", self._node_entity_extract)
         builder.add_node("alarm_rag", self._node_alarm_rag)
-        builder.add_node("plan_execute", self._node_plan_execute_parallel)
-        builder.add_node("evidence_validation", self._node_evidence_validation)
         builder.add_node("diagnose", self._node_diagnose)
         builder.add_node("replanner", self._node_replanner)
-        builder.add_node("risk_action", self._node_risk_action_parallel)
+        builder.add_node("risk_action", self._node_risk_action)
 
         builder.add_edge(START, "entity_extract")
         builder.add_edge("entity_extract", "alarm_rag")
-        builder.add_edge("alarm_rag", "evidence_validation")
-        builder.add_conditional_edges(
-            "evidence_validation", self._route_evidence,
-            {"diagnose": "diagnose", "alarm_rag": "alarm_rag"},
-        )
+        builder.add_edge("alarm_rag", "diagnose")
         builder.add_edge("diagnose", "replanner")
         builder.add_conditional_edges(
             "replanner", self._route_replan,
@@ -70,317 +68,238 @@ class DiagnosisSubAgent(BaseSubAgent):
         builder.add_edge("risk_action", END)
 
     # ================================================================
-    # ① Entity Extract
+    # ① Entity Extract — 并行提取, 加超时
     # ================================================================
     def _node_entity_extract(self, state: dict[str, Any]) -> dict[str, Any]:
         text = state.get(K.CLEANED_INPUT, state.get(K.INPUT, ""))
-        entities = kg_service.extract_entities(text)
-        graph_entities = graphrag_service.extract_entities(text)
-        entities.update({k: v for k, v in graph_entities.items() if v and v != "未知"})
-        logger.info(f"  ① EntityExtract: device={entities.get('device_type')}, fault={entities.get('possible_faults', [])}")
+        t0 = time.time()
+
+        entities = {}
+
+        def _extract_kg():
+            try:
+                return kg_service.extract_entities(text)
+            except Exception as e:
+                logger.debug(f"KG实体提取失败: {e}")
+                return {}
+
+        def _extract_graphrag():
+            try:
+                return graphrag_service.extract_entities(text)
+            except Exception as e:
+                logger.debug(f"GraphRAG实体提取失败: {e}")
+                return {}
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_kg = pool.submit(_extract_kg)
+            f_gr = pool.submit(_extract_graphrag)
+            try:
+                entities = f_kg.result(timeout=3)
+            except (FuturesTimeoutError, Exception):
+                pass
+            try:
+                gr_entities = f_gr.result(timeout=3)
+                entities.update({k: v for k, v in gr_entities.items() if v and v != "未知"})
+            except (FuturesTimeoutError, Exception):
+                pass
 
         device_id = entities.get("device_id", "")
         if not device_id:
-            import re
             match = re.search(r'[A-Z]+\d+', text)
             if match:
                 device_id = match.group()
 
+        logger.info(f"  ① EntityExtract({time.time()-t0:.1f}s): device={entities.get('device_type')}, id={device_id}")
         return {K.ENTITIES: entities, K.DEVICE_ID: device_id}
 
     # ================================================================
-    # ② Alarm RAG — 三重混合检索
+    # ② Alarm RAG — 带缓存的三重混合检索
     # ================================================================
     def _node_alarm_rag(self, state: dict[str, Any]) -> dict[str, Any]:
         query = state.get(K.REWRITTEN_QUERY, state.get(K.INPUT, ""))
         entities = state.get(K.ENTITIES, {})
-
-        ctx = HookContext(input=query, entities=entities)
-        ctx = hook_engine.execute_hooks(HOOK_POINTS["PRE_RAG"], ctx)
+        t0 = time.time()
 
         device_type = entities.get("device_type", "")
         if device_type and device_type not in query:
             query = f"{device_type} {query}"
 
-        keyword_results = hybrid_search.search(query, top_k=15)
+        cache_key = f"rag:{query[:200]}"
+        now = time.time()
+        if cache_key in RAG_CACHE:
+            cached_time, cached_text = RAG_CACHE[cache_key]
+            if now - cached_time < RAG_CACHE_TTL:
+                logger.info(f"  ② RAG缓存命中({time.time()-t0:.1f}s)")
+                return {K.RAG_RESULTS: cached_text, K.REWRITTEN_QUERY: query}
+
+        ctx = HookContext(input=query, entities=entities)
+        ctx = hook_engine.execute_hooks(HOOK_POINTS["PRE_RAG"], ctx)
+
+        keyword_results = hybrid_search.search(query, top_k=8, use_rerank=False)
         graph_context = kg_service.build_graph_context(query)
-        graphrag_context = graphrag_service.build_graph_context(query)
 
         rag_parts = []
         if graph_context:
             rag_parts.append(graph_context)
-        if graphrag_context:
-            rag_parts.append(graphrag_context)
-        rag_parts.extend([f"[参考{i+1}] {r['text'][:500]}" for i, r in enumerate(keyword_results[:8])])
+        rag_parts.extend([f"[参考{i+1}] {r['text'][:400]}" for i, r in enumerate(keyword_results[:5])])
         rag_text = "\n\n".join(rag_parts)
+
+        RAG_CACHE[cache_key] = (now, rag_text)
+        if len(RAG_CACHE) > 100:
+            oldest = min(RAG_CACHE, key=lambda k: RAG_CACHE[k][0])
+            del RAG_CACHE[oldest]
 
         ctx.metadata["rag_count"] = len(keyword_results)
         ctx = hook_engine.execute_hooks(HOOK_POINTS["POST_RAG"], ctx)
 
-        logger.info(f"  ② AlarmRAG: {len(keyword_results)}条 → RAG上下文{len(rag_text)}字")
+        logger.info(f"  ② RAG检索({time.time()-t0:.1f}s): {len(keyword_results)}条, 上下文{len(rag_text)}字")
         return {K.RAG_RESULTS: rag_text, K.REWRITTEN_QUERY: query}
 
     # ================================================================
-    # ③ Planner — LLM 制定诊断计划
-    # ================================================================
-    def _node_planner(self, state: dict[str, Any]) -> dict[str, Any]:
-        input_text = state.get(K.INPUT, "")
-        entities = state.get(K.ENTITIES, {})
-        rag_context = state.get(K.RAG_RESULTS, "")[:1500]
-
-        prompt = f"""你是故障诊断计划专家。根据以下信息制定诊断计划。
-
-故障描述: {input_text}
-实体信息: {json.dumps(entities, ensure_ascii=False)}
-知识库参考: {rag_context[:800]}
-
-生成 JSON 格式的诊断计划步骤列表:
-{{"steps":[{{"step_id":"1","type":"rag/tool/diagnosis","action":"步骤名","description":"详细说明","tool":"工具名(可选)"}}]}}"""
-
-        try:
-            plan = llm.chat_json("你输出JSON格式诊断计划。", prompt, temperature=0.1)
-            steps = plan.get("steps", [{"step_id": "1", "type": "diagnosis", "action": "综合诊断", "description": "收集所有证据后执行综合诊断"}])
-        except (json.JSONDecodeError, IndexError, RuntimeError) as e:
-            logger.warning(f"诊断计划生成失败，使用默认计划: {e}")
-            steps = [{"step_id": "1", "type": "diagnosis", "action": "综合诊断", "description": "执行综合故障诊断"}]
-
-        logger.info(f"  ③ Planner: {len(steps)}个步骤")
-        return {K.PLAN_STEPS: steps, K.CURRENT_STEP_INDEX: 0}
-
-    # ================================================================
-    # ④ Executor — 4并行子Agent执行
-    # ================================================================
-    def _node_executor(self, state: dict[str, Any]) -> dict[str, Any]:
-        device_id = state.get(K.DEVICE_ID, "")
-        input_text = state.get(K.INPUT, "")
-        rag_context = state.get(K.RAG_RESULTS, "")
-
-        from app.agent.subagent_executor import SubagentExecutor
-
-        tool_data = {}
-        if device_id:
-            ctx = HookContext(input=input_text, entities=state.get(K.ENTITIES, {}))
-            ctx = hook_engine.execute_hooks(HOOK_POINTS["PRE_TOOL_USE"], ctx)
-            if not ctx.metadata.get("tool_blocked"):
-                try:
-                    from mcp_server.tools import (get_device_status, get_alarm_history,
-                                                   get_device_logs, get_defect_tickets, search_safety_rules)
-                    tool_data["metrics"] = json.dumps(get_device_status(device_id), ensure_ascii=False, default=str)[:1000]
-                    tool_data["alarm"] = json.dumps(get_alarm_history(device_id, limit=10), ensure_ascii=False, default=str)[:800]
-                    tool_data["log"] = json.dumps(get_device_logs(device_id, limit=20), ensure_ascii=False, default=str)[:1000]
-                    tool_data["ticket"] = json.dumps(get_defect_tickets(device_id), ensure_ascii=False, default=str)[:800]
-                except Exception as e:
-                    logger.warning(f"MCP工具调用失败: {e}")
-            ctx = hook_engine.execute_hooks(HOOK_POINTS["POST_TOOL_USE"], ctx)
-
-        tool_data["regulation"] = ""
-        try:
-            from mcp_server.tools import search_safety_rules
-            tool_data["regulation"] = json.dumps(search_safety_rules(input_text[:50]), ensure_ascii=False, default=str)[:800]
-        except (ImportError, RuntimeError) as e:
-            logger.debug(f"MCP安规工具不可用: {e}")
-
-        executor = SubagentExecutor()
-        subs = ["regulation", "log"]
-        context = f"故障: {input_text}\n知识库: {rag_context[:500]}"
-
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        sub_results = loop.run_until_complete(executor.execute_parallel(subs, context, tool_data))
-
-        evidence_parts = []
-        step_results = []
-        for sr in sub_results:
-            if sr.success:
-                evidence_parts.append(f"## {sr.name} 分析\n{sr.result}")
-                step_results.append(sr.result)
-            else:
-                evidence_parts.append(f"## {sr.name} 失败: {sr.error}")
-
-        logger.info(f"  ④ Executor: {len([s for s in sub_results if s.success])}/{len(subs)}成功")
-        return {
-            K.STEP_RESULTS: step_results,
-            K.EVIDENCE: "\n\n".join(evidence_parts),
-        }
-
-    # ================================================================
-    # ⑤ Evidence Validation
-    # ================================================================
-    def _node_evidence_validation(self, state: dict[str, Any]) -> dict[str, Any]:
-        step_results = state.get(K.STEP_RESULTS, [])
-        rag_results = state.get(K.RAG_RESULTS, "")
-        evidence_count = len(step_results) + (1 if rag_results else 0)
-
-        ctx = HookContext(
-            input=state.get(K.INPUT, ""),
-            entities=state.get(K.ENTITIES, {}),
-            metadata={"evidence_count": evidence_count}
-        )
-        ctx = hook_engine.execute_hooks(HOOK_POINTS["PRE_DIAGNOSIS"], ctx)
-
-        warnings = []
-        if evidence_count < 2:
-            warnings.append("证据来源不足(<2个)，诊断置信度可能偏低")
-
-        score = min(evidence_count * 0.25, 0.95)
-        coverage = min(evidence_count * 0.2, 0.95)
-
-        logger.info(f"  ⑤ EvidenceValidation: {evidence_count}个来源, 评分{score:.2f}, 覆盖度{coverage:.2f}")
-        return {
-            K.EVIDENCE_SCORE: score,
-            K.EVIDENCE_COVERAGE: coverage,
-            K.EVIDENCE_WARNINGS: warnings if warnings else [],
-        }
-
-    def _route_evidence(self, state: dict[str, Any]) -> str:
-        score = state.get(K.EVIDENCE_SCORE, 0.5)
-        return "diagnose" if score >= 0.3 else "planner"
-
-    # ================================================================
-    # ⑥ Diagnose — 综合诊断
+    # ③ Diagnose — 精简 prompt, 单次 LLM 调用, 内嵌行动建议
     # ================================================================
     def _node_diagnose(self, state: dict[str, Any]) -> dict[str, Any]:
         input_text = state.get(K.INPUT, "")
-        rag_context = state.get(K.RAG_RESULTS, "")
-        evidence = state.get(K.EVIDENCE, "")
-        skill_context = state.get(K.SKILL_CONTEXT, "")
-        tool_context = state.get("_tool_context", "")
+        rag_context = state.get(K.RAG_RESULTS, "")[:2500]
+        entities = state.get(K.ENTITIES, {})
+        device_id = state.get(K.DEVICE_ID, "")
         multimodal = state.get("_multimodal_result", "")
+        t0 = time.time()
 
-        full_context = f"故障描述: {input_text}\n\n知识库:\n{rag_context[:3000]}\n\n多维度证据:\n{evidence[:3000]}"
-        if tool_context:
-            full_context += f"\n\n设备状态: {tool_context[:800]}"
+        device_info = f"设备类型:{entities.get('device_type', '未知')}"
+        if device_id:
+            device_info += f" ID:{device_id}"
+
+        context_parts = [f"故障: {input_text}", device_info]
+        if rag_context:
+            context_parts.append(f"知识库参考:\n{rag_context}")
         if multimodal:
-            full_context += f"\n\n多模态: {multimodal[:800]}"
+            context_parts.append(f"多模态分析: {multimodal[:800]}")
+        full_context = "\n\n".join(context_parts)
 
-        unified_prompt = """你是新能源场站智能诊断专家。简洁输出诊断报告:
+        prompt = """新能源场站智能诊断专家。简洁报告，全中文，禁止任何英文单词和缩写(包括IGBT/NTC等统一用中文)。
 
-## 诊断结论 (根因+置信度)
-## 可能原因 (按概率排序)
-## 处置建议 (具体可执行的步骤)
+## 诊断结论 (根因+置信度+风险等级)
+## 推理过程
+## 可能原因(3-4个)
+## 处置建议(2-4条)
 ## 安全提示
-## 风险等级: CRITICAL/HIGH/MEDIUM/LOW
-## 建议派单: 是/否
 
-规则: 严禁编造数据, 仅基于提供的证据推理。
-末尾输出JSON: {"root_cause":"根因","confidence":0.8,"risk_level":"HIGH"}"""
+末尾单独一行: 置信度:X% 风险:高/中/低"""
 
         try:
-            from app.agent.multi_model import multi_client
-            result = multi_client.diagnose_single(unified_prompt, full_context, model="deepseek-chat")
-            report_text = result.get("report_text", "")
-            parsed = {"confidence": result.get("confidence", 0.5),
-                       "root_cause": result.get("root_cause", ""),
-                       "risk_level": result.get("risk_level", "MEDIUM")}
+            text = llm.chat(prompt, full_context, temperature=0.1, max_tokens=600)
         except Exception as e:
-            logger.error(f"LLM调用失败: {e}")
-            report_text = llm.chat(unified_prompt, full_context, temperature=0.1, max_tokens=2048)
-            parsed = {"root_cause": "待定", "confidence": 0.5, "risk_level": "MEDIUM"}
+            logger.error(f"LLM诊断失败: {e}")
+            return {K.EXECUTION_RESULT: "诊断服务暂时不可用，请稍后重试",
+                     K.FINAL_RESPONSE: f"诊断服务暂时不可用: {str(e)[:100]}",
+                     K.CONFIDENCE: 0.3, K.RISK_LEVEL: "MEDIUM"}
 
-        try:
-            if "```json" in report_text:
-                parsed.update(json.loads(report_text.split("```json")[1].split("```")[0]))
-        except (json.JSONDecodeError, IndexError):
-            pass
+        import re
+        conf_match = re.search(r'置信度\s*[:：]\s*(\d+)\s*%', text)
+        risk_match = re.search(r'风险\s*[:：]\s*(高|中|低)', text)
+        parsed = {}
+        if conf_match:
+            parsed["confidence"] = int(conf_match.group(1)) / 100.0
+        if risk_match:
+            rmap = {"高": "HIGH", "中": "MEDIUM", "低": "LOW"}
+            parsed["risk_level"] = rmap.get(risk_match.group(1), "MEDIUM")
 
-        evidence_conf = self._calc_evidence_confidence(state, report_text)
-        final_conf = max(parsed.get("confidence", 0.5), evidence_conf)
+        clean_text = re.sub(r'```json\s*\{[^`]*\}\s*```', '', text)
+        clean_text = re.sub(r'\{[^}]*"root_cause"[^}]*confidence[^}]*\}', '', clean_text)
+        clean_text = re.sub(r'\n\s*\n\s*\n', '\n\n', clean_text).strip()
 
-        logger.info(f"  ⑥ Diagnose: 置信度{final_conf:.2f}, 风险{parsed.get('risk_level', 'MEDIUM')}")
+        cn_map = {"IGBT": "功率模块", "NTC": "温度传感器", "PLC": "控制器",
+                   "SCADA": "监控系统", "PID": "电势衰减", "DGA": "油色谱",
+                   "BMS": "电池管理", "UPS": "不间断电源"}
+        for en, cn in cn_map.items():
+            clean_text = clean_text.replace(en, cn)
+
+        evidence_conf = 0.40
+        if rag_context:
+            evidence_conf += 0.20
+        if device_id:
+            evidence_conf += 0.10
+        if len(text) > 600:
+            evidence_conf += 0.05
+        if multimodal:
+            evidence_conf += 0.05
+        evidence_conf = min(evidence_conf, 0.90)
+
+        parsed_conf = parsed.get("confidence", 0.5)
+        final_conf = max(parsed_conf, evidence_conf)
+
+        elapsed = time.time() - t0
+        logger.info(f"  ③ Diagnose({elapsed:.1f}s): 置信度{final_conf:.2f}, 风险{parsed.get('risk_level','MEDIUM')}")
+
         return {
-            K.EXECUTION_RESULT: report_text,
-            K.FINAL_RESPONSE: report_text,
+            K.EXECUTION_RESULT: clean_text,
+            K.FINAL_RESPONSE: clean_text,
             K.DIAGNOSIS_RESULT: {
-                "root_causes": [{"cause": parsed.get("root_cause", ""), "probability": final_conf,
-                                  "evidence": [report_text[:500]]}],
-                "analysis": report_text,
+                "root_causes": [{"cause": "请查看报告", "probability": final_conf,
+                                  "evidence": [clean_text[:500]]}],
+                "analysis": clean_text,
             },
             K.CONFIDENCE: final_conf,
             K.RISK_LEVEL: parsed.get("risk_level", "MEDIUM"),
+            "_actions": [],
         }
 
-    def _calc_evidence_confidence(self, state: dict, report_text: str) -> float:
-        score = 0.40
-        if state.get(K.RAG_RESULTS): score += 0.20
-        if state.get(K.EVIDENCE): score += 0.15
-        if state.get(K.DEVICE_ID): score += 0.05
-        if len(report_text) > 1500: score += 0.05
-        return min(score, 0.90)
-
     # ================================================================
-    # ⑦ Replanner — 重规划判断
+    # ④ Replanner — 重规划判断 (最多重试2次)
     # ================================================================
     def _node_replanner(self, state: dict[str, Any]) -> dict[str, Any]:
         confidence = state.get(K.CONFIDENCE, 0.5)
         loop = state.get(K.LOOP_COUNT, 0) + 1
-        score = state.get("judge_score", 0)
-        max_retry = state.get("max_retries", 2)
+        max_retry = state.get("max_retries", settings.max_retries)
 
         if confidence < 0.5 and loop <= max_retry:
             judge_details = state.get("judge_details", {})
-            hints = [f"{dim}: {detail.get('comment', '')[:60]}"
-                     for dim, detail in judge_details.items() if detail.get("score", 100) < 70]
-            hint = "  ".join(hints) if hints else "扩大检索范围重新推理"
-
+            hints = [f"{dim}:{d.get('comment','')[:40]}"
+                     for dim, d in judge_details.items() if d.get("score", 100) < 70]
+            hint = " ".join(hints) if hints else "扩大检索范围,重新推理"
             existing_rag = state.get(K.RAG_RESULTS, "")
-            logger.info(f"  ⑦ Replanner: 置信度{confidence:.2f}<0.5, 第{loop}次重规划")
 
+            logger.info(f"  ④ Replanner: 置信度{confidence:.2f}<0.5, 第{loop}次重规划")
             return {
-                K.LOOP_COUNT: loop,
-                K.RAG_RESULTS: f"{existing_rag}\n\n[重规划{loop}] {hint}",
-                K.NEXT_ACTION: "replan",
+                K.LOOP_COUNT: loop, K.NEXT_ACTION: "replan",
+                K.RAG_RESULTS: f"{existing_rag}\n[重规划{loop}提示] {hint}",
             }
-
-        logger.info(f"  ⑦ Replanner: 通过, 进入风险评估")
+        logger.info(f"  ④ Replanner: 通过(置信度{confidence:.2f})")
         return {K.LOOP_COUNT: loop, K.NEXT_ACTION: "continue"}
 
     def _route_replan(self, state: dict[str, Any]) -> str:
-        return "alarm_rag" if state.get(K.NEXT_ACTION) == "replan" else "risk_assessment"
+        return "alarm_rag" if state.get(K.NEXT_ACTION) == "replan" else "risk_action"
 
     # ================================================================
-    # ⑧ Risk Assessment
+    # ⑤ Risk + Action — 纯规则, 无LLM调用
     # ================================================================
-    def _node_risk_assessment(self, state: dict[str, Any]) -> dict[str, Any]:
+    def _node_risk_action(self, state: dict[str, Any]) -> dict[str, Any]:
+        risk_level = state.get(K.RISK_LEVEL, "MEDIUM")
         report = state.get(K.EXECUTION_RESULT, "")
         device_type = state.get(K.ENTITIES, {}).get("device_type", "")
-        risk_level = state.get(K.RISK_LEVEL, "MEDIUM")
 
         impact = "单设备" if "全站" not in report else "全站"
         urgency = "紧急" if risk_level in ("CRITICAL", "HIGH") else "一般"
 
-        logger.info(f"  ⑧ RiskAssessment: {risk_level}, 影响{impact}, 紧急度{urgency}")
+        actions = state.get("_actions", [])
+        if not actions:
+            if risk_level in ("CRITICAL", "HIGH"):
+                actions = [
+                    {"priority": "高", "step": "立即通知值长", "detail": f"{device_type}设备{risk_level}级风险需立即处置"},
+                    {"priority": "高", "step": "执行紧急停机预案", "detail": "按场站规程执行紧急停机操作"},
+                    {"priority": "中", "step": "安排现场检修", "detail": f"通知运维班组检查{device_type}设备"},
+                ]
+            else:
+                actions = [
+                    {"priority": "中", "step": "持续监控", "detail": "加强运行参数监测频率"},
+                    {"priority": "低", "step": "安排计划检修", "detail": "纳入下次计划检修窗口"},
+                ]
+
+        logger.info(f"  ⑤ RiskAction: {risk_level}, 影响{impact}, 紧急度{urgency}, {len(actions)}条建议")
         return {
             K.RISK_LEVEL: risk_level,
             "_risk_impact": impact,
             "_risk_urgency": urgency,
+            "_actions": actions,
         }
-
-    # ================================================================
-    # ⑨ Action Recommend
-    # ================================================================
-    def _node_action_recommend(self, state: dict[str, Any]) -> dict[str, Any]:
-        report = state.get(K.EXECUTION_RESULT, "")
-        if not report:
-            return {}
-
-        prompt = """基于诊断报告生成具体可执行行动建议。输出JSON:
-{"actions":[{"priority":"高/中/低","step":"步骤","detail":"说明","estimated_time":"预估时间","tools_needed":["工具"],"safety_note":"安全提示"}]}"""
-
-        try:
-            actions = llm.chat_json(prompt, report[:2000], temperature=0.1)
-            logger.info(f"  ⑨ ActionRecommend: {len(actions.get('actions', []))}条建议")
-            return {"_actions": actions.get("actions", [])}
-        except (json.JSONDecodeError, IndexError, RuntimeError) as e:
-            logger.warning(f"处置建议生成失败: {e}")
-            return {"_actions": []}
-
-    async def _node_plan_execute_parallel(self, state: dict[str, Any]) -> dict[str, Any]:
-        plan_result = self._node_planner(state)
-        return {"_plan": plan_result, **(self._node_executor(state) if state.get("_tool_context") else {})}
-
-    async def _node_risk_action_parallel(self, state: dict[str, Any]) -> dict[str, Any]:
-        risk_result = self._node_risk_assessment(state)
-        return {"_risk": risk_result}
