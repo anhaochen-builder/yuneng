@@ -50,3 +50,4 @@
 {"feedback_id": "ad93fb0a-41e4-4801-8901-967ad515f3b8", "task_id": "test-task-002", "rating": "inaccurate", "comment": "根因判断有误", "corrected_root_cause": null, "operator": "system", "created_at": "2026-08-07T09:17:56.165696"}
 {"feedback_id": "8ff8d4fa-bde2-4ff0-bea9-32bfbb91788f", "task_id": "test-task-002", "rating": "inaccurate", "comment": "根因判断有误", "corrected_root_cause": null, "operator": "system", "created_at": "2026-08-07T09:35:03.265234"}
 {"feedback_id": "49c933dd-46be-4c73-bb4a-b4770faaf00d", "task_id": "test-task-002", "rating": "inaccurate", "comment": "根因判断有误", "corrected_root_cause": null, "operator": "system", "created_at": "2026-08-07T10:03:15.329613"}
+{"feedback_id": "9d6db9a1-3607-4a88-b062-ab81be10ff23", "task_id": "test-task-002", "rating": "inaccurate", "comment": "根因判断有误", "corrected_root_cause": null, "operator": "system", "created_at": "2026-08-10T11:00:19.926344"}

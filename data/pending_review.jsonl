@@ -50,3 +50,4 @@
 {"feedback_id": "3a2c4bfa-6a9b-4aa7-8b52-c3a1135db11d", "task_id": "test-task-003", "rating": "partially_accurate", "comment": null, "corrected_root_cause": "实际是散热风扇故障", "operator": "system", "created_at": "2026-08-07T09:17:56.172536"}
 {"feedback_id": "75b78dd6-e22c-484b-a9cb-0ba0e7434ff5", "task_id": "test-task-003", "rating": "partially_accurate", "comment": null, "corrected_root_cause": "实际是散热风扇故障", "operator": "system", "created_at": "2026-08-07T09:35:03.270787"}
 {"feedback_id": "2f76273a-0e85-4b8a-9432-8acfce2eb585", "task_id": "test-task-003", "rating": "partially_accurate", "comment": null, "corrected_root_cause": "实际是散热风扇故障", "operator": "system", "created_at": "2026-08-07T10:03:15.336669"}
+{"feedback_id": "37975709-3cb1-4517-a7ea-e1ffb439e14c", "task_id": "test-task-003", "rating": "partially_accurate", "comment": null, "corrected_root_cause": "实际是散热风扇故障", "operator": "system", "created_at": "2026-08-10T11:00:19.931671"}
