@@ -35,6 +35,7 @@ htmlcov/
 .onnx_models/
 *.zip
 *.bz2
+*.docx
 
 # IDE
 .idea/
