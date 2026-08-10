@@ -7,6 +7,7 @@ API:  DeepSeek API 嵌入 (openai embeddings endpoint)
 
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +23,7 @@ _embedding_fn: Optional[object] = None
 _embedding_available: bool = False
 _embedding_checked: bool = False
 _chroma_client = None
+_chroma_lock = threading.Lock()
 
 
 def _try_load_embedding():
@@ -79,12 +81,14 @@ def _embed_texts(texts: list[str]) -> Optional[list[list[float]]]:
 def get_chroma_client() -> chromadb.PersistentClient:
     global _chroma_client
     if _chroma_client is None:
-        persist_dir = Path(app_settings.vector_db_path)
-        persist_dir.mkdir(parents=True, exist_ok=True)
-        _chroma_client = chromadb.PersistentClient(
-            path=str(persist_dir),
-            settings=Settings(anonymized_telemetry=False),
-        )
+        with _chroma_lock:
+            if _chroma_client is None:
+                persist_dir = Path(app_settings.vector_db_path)
+                persist_dir.mkdir(parents=True, exist_ok=True)
+                _chroma_client = chromadb.PersistentClient(
+                    path=str(persist_dir),
+                    settings=Settings(anonymized_telemetry=False),
+                )
     return _chroma_client
 
 

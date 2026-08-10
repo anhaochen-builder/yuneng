@@ -1,11 +1,51 @@
+# Python
 venv/
 __pycache__/
 *.pyc
+*.pyo
+
+# 环境与密钥
 .env
-checkpoints.db
+.env.local
+
+# 数据库
+*.db
+*.db-shm
+*.db-wal
+
+# 数据目录
 data/raw/*
 !data/raw/.gitkeep
+data/training/
+data/processed/
+
+# 向量知识库
 knowledge_db/
+
+# 日志
+logs/
+*.log
+
+# 测试与覆盖率
+.coverage
+.pytest_cache/
+htmlcov/
+
+# 模型缓存
 .onnx_models/
 *.zip
 *.bz2
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# 临时文件
+*.tmp
+*.bak
