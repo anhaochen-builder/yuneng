@@ -46,6 +46,16 @@
 | **前端** | Vue 3 + Element Plus + ECharts + Three.js |
 | **部署** | Docker Compose + Nginx |
 
+## 界面预览
+
+![仪表盘总览](docs/screenshots/01-dashboard.png)
+
+![智能诊断中心](docs/screenshots/02-diagnostic.png)
+
+![知识库管理](docs/screenshots/03-knowledge.png)
+
+![设备监控中心](docs/screenshots/04-monitor.png)
+
 ## 快速开始
 
 ### 环境要求
