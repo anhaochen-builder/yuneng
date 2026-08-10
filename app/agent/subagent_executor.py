@@ -41,18 +41,29 @@ class SubagentExecutor:
     """子 Agent 并行执行器"""
 
     async def execute_parallel(self, names: list[str], context: str,
-                               tool_results: dict[str, Any] = None) -> list[SubagentTask]:
+                                tool_results: dict[str, Any] = None,
+                                timeout: float = 30.0) -> list[SubagentTask]:
         tasks = []
         for name in names:
             prompt = SUBAGENT_PROMPTS.get(name, "分析以下内容。")
             tasks.append(self._run_subagent(name, prompt, context, tool_results))
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            results = []
+            for name in names:
+                results.append(SubagentTask(name=name, error="超时", success=False))
         output = []
         for i, r in enumerate(results):
             if isinstance(r, Exception):
                 output.append(SubagentTask(name=names[i], error=str(r), success=False))
-            else:
+            elif isinstance(r, SubagentTask):
                 output.append(r)
+            else:
+                output.append(SubagentTask(name=names[i], error=f"未知类型: {type(r)}", success=False))
         return output
 
     async def _run_subagent(self, name: str, system_prompt: str, context: str,
@@ -65,7 +76,7 @@ class SubagentExecutor:
                 user_prompt += f"\n\n工具查询结果:\n{tool_results[name]}"
             loop = asyncio.get_event_loop()
             result_text = await loop.run_in_executor(
-                None, lambda: llm.chat(system_prompt, user_prompt, temperature=0.1, max_tokens=1024)
+                None, lambda: llm.chat(system_prompt, user_prompt, temperature=0.1, max_tokens=512)
             )
             return SubagentTask(name=name, result=result_text, success=True, elapsed=time.time() - start)
         except Exception as e:

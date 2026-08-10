@@ -67,8 +67,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="驭能 - 新能源场站非计划停机智能诊断系统",
-    description="基于 DeepSeek V4 Pro + Hermes + OpenCode 的智能诊断平台",
+    title="驭能-风电运维 - 新能源场站非计划停机智能诊断系统",
+    description="基于 DeepSeek V4 Pro + LangGraph 的智能诊断平台",
     version="1.0.0",
     lifespan=lifespan,
 )

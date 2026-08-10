@@ -393,9 +393,7 @@ class TestGraph:
         import asyncio
         state = {"input": "逆变器通讯中断如何处理？"}
         try:
-            result = asyncio.get_event_loop().run_until_complete(
-                graph.ainvoke(state)
-            )
+            result = asyncio.run(graph.ainvoke(state))
             assert "final_response" in result or "execution_result" in result
         except Exception as e:
             pytest.skip(f"端到端测试跳过: {str(e)[:100]}")
